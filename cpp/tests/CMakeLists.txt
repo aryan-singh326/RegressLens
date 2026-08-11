@@ -12,3 +12,10 @@ target_link_libraries(test_reduction_avx2 PRIVATE regresslens_core)
 # AVX2 opt-in applied ONLY to this target, not globally, so scalar
 # code stays portable per the project's kernel isolation policy.
 target_compile_options(test_reduction_avx2 PRIVATE -mavx2)
+
+add_executable(test_projection_scalar test_projection_scalar.cpp)
+target_link_libraries(test_projection_scalar PRIVATE regresslens_core)
+
+add_executable(test_projection_avx2 test_projection_avx2.cpp)
+target_link_libraries(test_projection_avx2 PRIVATE regresslens_core)
+target_compile_options(test_projection_avx2 PRIVATE -mavx2 -mfma)
