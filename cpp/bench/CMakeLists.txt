@@ -1,0 +1,2 @@
+add_executable(bench_reduction bench_reduction.cpp)
+target_link_libraries(bench_reduction PRIVATE regresslens_core benchmark::benchmark)

@@ -1,0 +1,22 @@
+{
+  "name": "regresslens-dev",
+  "image": "mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake"
+      ]
+    }
+  },
+  "postCreateCommand": "cmake --version && gcc --version",
+  "hostRequirements": {
+    "cpus": 4
+  }
+}
