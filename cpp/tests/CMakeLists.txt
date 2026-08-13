@@ -19,3 +19,10 @@ target_link_libraries(test_projection_scalar PRIVATE regresslens_core)
 add_executable(test_projection_avx2 test_projection_avx2.cpp)
 target_link_libraries(test_projection_avx2 PRIVATE regresslens_core)
 target_compile_options(test_projection_avx2 PRIVATE -mavx2 -mfma)
+
+add_executable(test_filter_scalar test_filter_scalar.cpp)
+target_link_libraries(test_filter_scalar PRIVATE regresslens_core)
+
+add_executable(test_filter_avx2 test_filter_avx2.cpp)
+target_link_libraries(test_filter_avx2 PRIVATE regresslens_core)
+target_compile_options(test_filter_avx2 PRIVATE -mavx2)
