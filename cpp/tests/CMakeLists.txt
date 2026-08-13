@@ -41,3 +41,6 @@ target_compile_options(test_reduction_mt_avx2 PRIVATE -mavx2)
 add_executable(test_filter_mt_avx2 test_filter_mt_avx2.cpp)
 target_link_libraries(test_filter_mt_avx2 PRIVATE regresslens_core Threads::Threads)
 target_compile_options(test_filter_mt_avx2 PRIVATE -mavx2)
+
+add_executable(test_kernel_selector test_kernel_selector.cpp)
+target_link_libraries(test_kernel_selector PRIVATE regresslens_core)
