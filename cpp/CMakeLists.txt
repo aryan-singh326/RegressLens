@@ -14,6 +14,13 @@ add_compile_options(-O3 -Wall -Wextra)
 
 find_package(Threads REQUIRED)
 
+# Let CMake find pybind11's config even though it was installed via pip.
+execute_process(
+    COMMAND python3 -m pybind11 --cmakedir
+    OUTPUT_VARIABLE pybind11_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
 include(FetchContent)
 FetchContent_Declare(
   googlebenchmark
@@ -27,6 +34,7 @@ FetchContent_MakeAvailable(googlebenchmark)
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(bench)
+add_subdirectory(python_bindings)
 
 # Step 2 sanity-check binary: confirms toolchain + AVX2 availability.
 add_executable(cpu_check src/cpu_check.cpp)
