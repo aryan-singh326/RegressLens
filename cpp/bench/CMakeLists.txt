@@ -8,3 +8,7 @@ target_compile_options(bench_projection PRIVATE -mavx2 -mfma)
 add_executable(bench_filter bench_filter.cpp)
 target_link_libraries(bench_filter PRIVATE regresslens_core benchmark::benchmark)
 target_compile_options(bench_filter PRIVATE -mavx2)
+
+add_executable(bench_rolling bench_rolling.cpp)
+target_link_libraries(bench_rolling PRIVATE regresslens_core benchmark::benchmark)
+target_compile_options(bench_rolling PRIVATE -mavx2)
