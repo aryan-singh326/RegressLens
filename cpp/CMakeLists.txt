@@ -12,6 +12,8 @@ endif()
 # AVX2 code opts in per-target below, not globally.
 add_compile_options(-O3 -Wall -Wextra)
 
+find_package(Threads REQUIRED)
+
 include(FetchContent)
 FetchContent_Declare(
   googlebenchmark
