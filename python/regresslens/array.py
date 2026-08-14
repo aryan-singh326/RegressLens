@@ -9,9 +9,11 @@ transparently — this is NOT a full NumPy-compatible array type, and
 is not trying to be one.
 """
 import logging
+import os
 import numpy as np
 
 from . import _regresslens_native as _native
+from . import trace as _trace
 
 logger = logging.getLogger("regresslens")
 
@@ -99,8 +101,19 @@ class array:
             )
             result = self._data * scale + offset
             return array(result)
-        result, kernel = _native.project_affine_native(self._data, scale, offset)
+        result, kernel, runtime_ns = _native.project_affine_native(
+            self._data, scale, offset
+        )
         logger.debug("regresslens: project_affine() used kernel=%s", kernel)
+        _trace.record_trace(
+            operator="projection",
+            row_count=self._data.shape[0],
+            dtype=str(self._data.dtype),
+            contiguous=True,
+            selected_kernel=kernel,
+            runtime_ns=runtime_ns,
+            available_cores=os.cpu_count() or 1,
+        )
         return array(result)
 
     def filter_gt(self, threshold):
@@ -116,10 +129,28 @@ class array:
             )
             result = self._data[self._data > threshold]
             return array(result)
-        full, count, kernel = _native.filter_gt_native(self._data, threshold)
+        full, count, kernel, runtime_ns = _native.filter_gt_native(
+            self._data, threshold
+        )
         logger.debug(
             "regresslens: filter_gt() used kernel=%s (matched %d/%d)",
             kernel, count, len(self._data),
+        )
+        n = self._data.shape[0]
+        _trace.record_trace(
+            operator="filter",
+            row_count=n,
+            dtype=str(self._data.dtype),
+            contiguous=True,
+            selected_kernel=kernel,
+            runtime_ns=runtime_ns,
+            available_cores=os.cpu_count() or 1,
+            # This is the REAL observed selectivity, unlike the
+            # hardcoded 0.5 assumption the native layer's kernel
+            # selector currently uses (see kernel_selector.cpp). This
+            # is exactly the trace data a future selectivity-aware
+            # heuristic would read from, once enough history exists.
+            selectivity=(count / n) if n > 0 else None,
         )
         return array(full[:count])
 
@@ -142,8 +173,18 @@ class array:
             kernel_win = np.ones(window, dtype=self._data.dtype)
             result = np.convolve(self._data, kernel_win, mode="valid")
             return array(result)
-        result, kernel = _native.rolling_sum_native(self._data, window)
+        result, kernel, runtime_ns = _native.rolling_sum_native(self._data, window)
         logger.debug("regresslens: rolling_sum() used kernel=%s", kernel)
+        _trace.record_trace(
+            operator="rolling",
+            row_count=self._data.shape[0],
+            dtype=str(self._data.dtype),
+            contiguous=True,
+            selected_kernel=kernel,
+            runtime_ns=runtime_ns,
+            available_cores=os.cpu_count() or 1,
+            window=window,
+        )
         return array(result)
 
     def rolling_mean(self, window):
@@ -215,8 +256,17 @@ def _dispatch_sum(data, threads):
         )
         return float(np.sum(data))
     threads_override = -1 if threads is None else int(threads)
-    value, kernel = _native.reduce_sum_native(data, threads_override)
+    value, kernel, runtime_ns = _native.reduce_sum_native(data, threads_override)
     logger.debug("regresslens: sum() used kernel=%s", kernel)
+    _trace.record_trace(
+        operator="reduction",
+        row_count=data.shape[0],
+        dtype=str(data.dtype),
+        contiguous=True,
+        selected_kernel=kernel,
+        runtime_ns=runtime_ns,
+        available_cores=os.cpu_count() or 1,
+    )
     return value
 
 

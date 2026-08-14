@@ -5,6 +5,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include <chrono>
 #include <stdexcept>
 #include <thread>
 
@@ -89,10 +90,20 @@ double dispatch_reduce_sum(const T* data, size_t n, KernelChoice choice,
     throw std::logic_error("unreachable: unknown KernelChoice");
 }
 
-// The one function exposed for reduction. Returns (value, kernel_name)
-// rather than just the value, because Phase 3's trace persistence
-// needs to know which kernel ran for every call — this is that
-// observability hook, exposed from the start rather than retrofitted.
+using Clock = std::chrono::steady_clock;
+inline double elapsed_ns(Clock::time_point t0, Clock::time_point t1) {
+    return std::chrono::duration<double, std::nano>(t1 - t0).count();
+}
+
+// The one function exposed for reduction. Returns (value, kernel_name,
+// runtime_ns) rather than just the value, because Phase 3's trace
+// persistence needs to know which kernel ran and how long it took
+// for every call — this is that observability hook, exposed from the
+// start rather than retrofitted. Timing wraps ONLY the kernel
+// dispatch, not array validation/dtype detection/selection — those
+// are the "interception overhead" the project brief tracks
+// separately (see cpp/bench/characterize.cpp), not part of the
+// kernel's own runtime.
 py::tuple reduce_sum_native(py::array arr, int threads_override) {
     ArrayInfo ai = get_array_info(arr, "reduce_sum_native");
 
@@ -104,6 +115,7 @@ py::tuple reduce_sum_native(py::array arr, int threads_override) {
     SelectionContext ctx{Operation::Reduction, ai.dtype, ai.n, ai.contiguous, threads};
     KernelChoice choice = select_kernel(ctx);
 
+    auto t0 = Clock::now();
     double result;
     if (ai.dtype == DType::Float64) {
         result = dispatch_reduce_sum<double>(static_cast<const double*>(ai.info.ptr),
@@ -112,8 +124,9 @@ py::tuple reduce_sum_native(py::array arr, int threads_override) {
         result = dispatch_reduce_sum<float>(static_cast<const float*>(ai.info.ptr),
                                              ai.n, choice, threads);
     }
+    auto t1 = Clock::now();
 
-    return py::make_tuple(result, kernel_choice_name(choice));
+    return py::make_tuple(result, kernel_choice_name(choice), elapsed_ns(t0, t1));
 }
 
 // --- Projection ---
@@ -150,17 +163,21 @@ py::tuple project_affine_native(py::array arr, double scale, double offset) {
 
     if (ai.dtype == DType::Float64) {
         py::array_t<double> out(ai.n);
+        auto t0 = Clock::now();
         dispatch_project_affine<double>(static_cast<const double*>(ai.info.ptr),
                                          out.mutable_data(), ai.n, scale, offset,
                                          choice);
-        return py::make_tuple(out, kernel_choice_name(choice));
+        auto t1 = Clock::now();
+        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
     } else {
         py::array_t<float> out(ai.n);
+        auto t0 = Clock::now();
         dispatch_project_affine<float>(static_cast<const float*>(ai.info.ptr),
                                         out.mutable_data(), ai.n,
                                         static_cast<float>(scale),
                                         static_cast<float>(offset), choice);
-        return py::make_tuple(out, kernel_choice_name(choice));
+        auto t1 = Clock::now();
+        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
     }
 }
 
@@ -198,16 +215,22 @@ py::tuple filter_gt_native(py::array arr, double threshold, int threads_override
 
     if (ai.dtype == DType::Float64) {
         py::array_t<double> out(ai.n);  // worst case: everything passes
+        auto t0 = Clock::now();
         size_t count = dispatch_filter_gt<double>(
             static_cast<const double*>(ai.info.ptr), out.mutable_data(), ai.n,
             threshold, choice, threads);
-        return py::make_tuple(out, count, kernel_choice_name(choice));
+        auto t1 = Clock::now();
+        return py::make_tuple(out, count, kernel_choice_name(choice),
+                               elapsed_ns(t0, t1));
     } else {
         py::array_t<float> out(ai.n);
+        auto t0 = Clock::now();
         size_t count = dispatch_filter_gt<float>(
             static_cast<const float*>(ai.info.ptr), out.mutable_data(), ai.n,
             static_cast<float>(threshold), choice, threads);
-        return py::make_tuple(out, count, kernel_choice_name(choice));
+        auto t1 = Clock::now();
+        return py::make_tuple(out, count, kernel_choice_name(choice),
+                               elapsed_ns(t0, t1));
     }
 }
 
@@ -246,18 +269,22 @@ py::tuple rolling_sum_native(py::array arr, size_t window) {
 
     if (ai.dtype == DType::Float64) {
         py::array_t<double> out(out_count);
+        auto t0 = Clock::now();
         size_t count = dispatch_rolling_sum<double>(
             static_cast<const double*>(ai.info.ptr), out.mutable_data(), ai.n,
             window, choice);
+        auto t1 = Clock::now();
         (void)count;  // == out_count by construction; kept for symmetry/clarity
-        return py::make_tuple(out, kernel_choice_name(choice));
+        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
     } else {
         py::array_t<float> out(out_count);
+        auto t0 = Clock::now();
         size_t count = dispatch_rolling_sum<float>(
             static_cast<const float*>(ai.info.ptr), out.mutable_data(), ai.n,
             window, choice);
+        auto t1 = Clock::now();
         (void)count;
-        return py::make_tuple(out, kernel_choice_name(choice));
+        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
     }
 }
 
@@ -270,30 +297,32 @@ PYBIND11_MODULE(_regresslens_native, m) {
     m.def("reduce_sum_native", &reduce_sum_native, py::arg("array"),
           py::arg("threads_override") = -1,
           "Sum-reduce a contiguous float32/float64 NumPy array using the "
-          "kernel selector. Returns (value, kernel_name_used). Raises on "
-          "non-contiguous input — callers should fall back to NumPy in "
-          "that case, not treat this as a bug to work around here.");
+          "kernel selector. Returns (value, kernel_name_used, "
+          "runtime_ns). Raises on non-contiguous input — callers should "
+          "fall back to NumPy in that case, not treat this as a bug to "
+          "work around here.");
 
     m.def("project_affine_native", &project_affine_native, py::arg("array"),
           py::arg("scale"), py::arg("offset"),
           "Elementwise out = scale*in + offset on a contiguous "
           "float32/float64 NumPy array. Returns (result_array, "
-          "kernel_name_used). Raises on non-contiguous input.");
+          "kernel_name_used, runtime_ns). Raises on non-contiguous "
+          "input.");
 
     m.def("filter_gt_native", &filter_gt_native, py::arg("array"),
           py::arg("threshold"), py::arg("threads_override") = -1,
           "Threshold filter (strictly greater than) on a contiguous "
           "float32/float64 NumPy array. Returns (full_capacity_array, "
-          "valid_count, kernel_name_used) — caller must slice to "
-          "[:valid_count]; the returned array is allocated at worst-case "
-          "size (n) since filter's output size is data-dependent and "
-          "unknown before the kernel runs. Raises on non-contiguous "
-          "input.");
+          "valid_count, kernel_name_used, runtime_ns) — caller must "
+          "slice to [:valid_count]; the returned array is allocated at "
+          "worst-case size (n) since filter's output size is "
+          "data-dependent and unknown before the kernel runs. Raises on "
+          "non-contiguous input.");
 
     m.def("rolling_sum_native", &rolling_sum_native, py::arg("array"),
           py::arg("window"),
           "Fixed-window rolling sum on a contiguous float32/float64 "
-          "NumPy array. Returns (result_array, kernel_name_used), where "
-          "result_array has length max(0, n - window + 1). Raises on "
-          "non-contiguous input.");
+          "NumPy array. Returns (result_array, kernel_name_used, "
+          "runtime_ns), where result_array has length "
+          "max(0, n - window + 1). Raises on non-contiguous input.");
 }
