@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS traces (
     runtime_ns REAL NOT NULL,
     hardware_fingerprint TEXT NOT NULL,
     timestamp REAL NOT NULL,
-    run_label TEXT
+    run_label TEXT,
+    call_site TEXT
 );
 """
 
@@ -68,6 +69,9 @@ def _migrate(conn):
     existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)")}
     if "run_label" not in existing_cols:
         conn.execute("ALTER TABLE traces ADD COLUMN run_label TEXT")
+        conn.commit()
+    if "call_site" not in existing_cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN call_site TEXT")
         conn.commit()
 
 
@@ -138,6 +142,28 @@ def get_hardware_fingerprint():
     return _CACHED_FINGERPRINT
 
 
+def capture_call_site():
+    """Returns 'file.py:line' for the first stack frame OUTSIDE the
+    regresslens package itself — i.e. the user's own code that called
+    into a regresslens.array method. This is the attribution the
+    project brief specifies: identifies WHERE the call that received
+    non-contiguous data was made, not WHY the array became
+    non-contiguous upstream (that would require tracking provenance
+    through the user's entire pipeline, which v0.1 does not attempt
+    — see the project brief's honest scope statement on this exact
+    point).
+    """
+    import inspect
+    import os as _os
+
+    package_dir = _os.path.dirname(_os.path.abspath(__file__))
+    for frame_info in inspect.stack():
+        frame_path = _os.path.abspath(frame_info.filename)
+        if not frame_path.startswith(package_dir):
+            return f"{_os.path.basename(frame_info.filename)}:{frame_info.lineno}"
+    return "unknown"
+
+
 def record_trace(
     operator,
     row_count,
@@ -150,6 +176,7 @@ def record_trace(
     window=None,
     db_path=None,
     run_label=None,
+    call_site=None,
 ):
     """Writes one trace row. Failures here are logged, not raised —
     a broken trace database should never be the reason a user's
@@ -175,8 +202,8 @@ def record_trace(
             conn.execute(
                 "INSERT INTO traces (operator, row_count, dtype, contiguous, "
                 "selectivity, window, available_cores, selected_kernel, "
-                "runtime_ns, hardware_fingerprint, timestamp, run_label) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "runtime_ns, hardware_fingerprint, timestamp, run_label, "
+                "call_site) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     operator,
                     row_count,
@@ -190,6 +217,7 @@ def record_trace(
                     get_hardware_fingerprint(),
                     time.time(),
                     run_label,
+                    call_site,
                 ),
             )
             conn.commit()
@@ -249,3 +277,50 @@ def get_samples(run_label, db_path=None):
         key = (operator, dtype, row_count)
         samples.setdefault(key, []).append(runtime_ns)
     return samples
+
+
+def get_first_contiguity_loss(operator, dtype, row_count, run_label, db_path=None):
+    """Returns (call_site, timestamp) for the EARLIEST non-contiguous
+    trace matching (operator, dtype, row_count) under run_label, or
+    None if there isn't one. 'Earliest' matches the project brief's
+    'first rd-observed call receiving non-contiguous array' framing
+    -- later occurrences at the same call site are the same root
+    cause repeating, not new information.
+    """
+    path = db_path or _DEFAULT_DB_PATH
+    if not os.path.exists(path):
+        return None
+    conn = sqlite3.connect(path)
+    conn.execute(_SCHEMA)
+    _migrate(conn)
+    row = conn.execute(
+        "SELECT call_site, timestamp FROM traces WHERE run_label = ? AND "
+        "operator = ? AND dtype = ? AND row_count = ? AND contiguous = 0 "
+        "ORDER BY timestamp ASC LIMIT 1",
+        (run_label, operator, dtype, row_count),
+    ).fetchone()
+    return row
+
+
+def get_contiguous_runtime_samples(operator, dtype, row_count, db_path=None):
+    """Returns ALL recorded runtime_ns for CONTIGUOUS (accelerated)
+    traces matching (operator, dtype, row_count), across every
+    run_label -- used to estimate what this call would cost if it
+    weren't hitting the non-contiguous fallback path, for the
+    remediation cost/benefit estimate. Deliberately not scoped to one
+    run_label: any historical accelerated run at this shape is a
+    reasonable reference point, and restricting to one session would
+    often mean no data at all.
+    """
+    path = db_path or _DEFAULT_DB_PATH
+    if not os.path.exists(path):
+        return []
+    conn = sqlite3.connect(path)
+    conn.execute(_SCHEMA)
+    _migrate(conn)
+    rows = conn.execute(
+        "SELECT runtime_ns FROM traces WHERE operator = ? AND dtype = ? AND "
+        "row_count = ? AND contiguous = 1",
+        (operator, dtype, row_count),
+    ).fetchall()
+    return [r[0] for r in rows]

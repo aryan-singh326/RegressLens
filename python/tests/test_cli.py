@@ -14,7 +14,7 @@ import textwrap
 
 import pytest
 
-from regresslens import cli, trace
+from regresslens import cli, remediation, trace
 
 
 @pytest.fixture
@@ -200,6 +200,102 @@ class TestProfile:
     def test_missing_script_returns_error(self, db_path):
         rc = cli.cmd_profile(Args(script="/nonexistent/script.py", runs=5))
         assert rc == 1
+
+
+class TestContiguityAttributionAndRemediation:
+    """Validates the diagnosis + remediation feature added after the
+    core CLI: when a regression coincides with a non-contiguous
+    array, the report should identify WHERE that happened and
+    estimate whether fixing it is worth the copy cost."""
+
+    @pytest.fixture
+    def contiguity_pipeline_script(self, tmp_path):
+        script = tmp_path / "contiguity_pipeline.py"
+        script.write_text(textwrap.dedent("""
+            import os
+            import numpy as np
+            import regresslens as rl
+
+            n = 5000
+            rng = np.random.default_rng(3)
+            flat_data = rng.uniform(-100, 100, n).astype(np.float64)
+
+            if os.environ.get("SIMULATE_CONTIGUITY_LOSS") == "1":
+                # Strided view: same row count, non-contiguous --
+                # simulates slicing a column out of a 2D array, a
+                # real-world pattern, while keeping the trace
+                # grouping key (row_count) identical to baseline.
+                padded = np.zeros((n, 2), dtype=np.float64)
+                padded[:, 0] = flat_data
+                data = padded[:, 0]
+            else:
+                data = flat_data
+
+            arr = rl.array(data)
+            result = arr.filter_gt(0.0)
+            total = result.sum()
+        """))
+        return str(script)
+
+    def test_regression_report_includes_diagnosis(
+        self, contiguity_pipeline_script, db_path, monkeypatch, capsys
+    ):
+        monkeypatch.delenv("SIMULATE_CONTIGUITY_LOSS", raising=False)
+        cli.cmd_baseline(Args(name="v1", runs=15, script=contiguity_pipeline_script))
+
+        monkeypatch.setenv("SIMULATE_CONTIGUITY_LOSS", "1")
+        rc = cli.cmd_check(Args(
+            baseline="v1", runs=15, script=contiguity_pipeline_script,
+            min_pairs=10, threshold=0.05, remediation_margin=2.0,
+        ))
+        captured = capsys.readouterr()
+
+        assert rc == 1  # a real regression should be detected
+        assert "Diagnosis:" in captured.out
+        assert "contiguity_pipeline.py" in captured.out
+        assert "Remediation" in captured.out
+
+    def test_no_diagnosis_when_nothing_is_non_contiguous(
+        self, contiguity_pipeline_script, db_path, monkeypatch, capsys
+    ):
+        monkeypatch.delenv("SIMULATE_CONTIGUITY_LOSS", raising=False)
+        cli.cmd_baseline(Args(name="v1", runs=15, script=contiguity_pipeline_script))
+        cli.cmd_check(Args(
+            baseline="v1", runs=15, script=contiguity_pipeline_script,
+            min_pairs=10, threshold=0.05, remediation_margin=2.0,
+        ))
+        captured = capsys.readouterr()
+        assert "Diagnosis:" not in captured.out
+
+
+class TestRemediationEstimation:
+    """Unit tests for the remediation cost/benefit math itself,
+    independent of the CLI plumbing."""
+
+    def test_recommends_apply_when_savings_far_exceed_cost(self):
+        result = remediation.estimate_remediation(
+            row_count=1000, dtype_bytes=8,
+            fallback_runtime_samples=[50_000_000.0] * 10,
+            accelerated_runtime_samples=[1000.0] * 10,
+        )
+        assert result["recommend_apply"] is True
+
+    def test_does_not_recommend_when_cost_exceeds_savings(self):
+        result = remediation.estimate_remediation(
+            row_count=100_000_000, dtype_bytes=8,
+            fallback_runtime_samples=[100_000.0] * 10,
+            accelerated_runtime_samples=[99_000.0] * 10,
+        )
+        assert result["recommend_apply"] is False
+
+    def test_no_historical_data_does_not_crash(self):
+        result = remediation.estimate_remediation(
+            row_count=1000, dtype_bytes=8,
+            fallback_runtime_samples=[1000.0] * 5,
+            accelerated_runtime_samples=[],
+        )
+        assert result["recommend_apply"] is False
+        assert result["reason"] is not None
 
 
 if __name__ == "__main__":

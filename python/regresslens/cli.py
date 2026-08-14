@@ -22,6 +22,7 @@ import subprocess
 import sys
 import time
 
+from . import remediation as _remediation
 from . import stats as _stats
 from . import trace as _trace
 
@@ -195,6 +196,68 @@ def cmd_check(args):
             if result["status"] == "regression":
                 print("    Status: REGRESSION")
                 any_regression = True
+
+                # Diagnosis: was this regression accompanied by a
+                # contiguity loss? Check the CURRENT session for a
+                # non-contiguous trace at this same call shape — per
+                # the project brief, this identifies WHERE the first
+                # such call happened, not WHY the array lost
+                # contiguity upstream (that's out of scope; see
+                # trace.capture_call_site's docstring).
+                loss = _trace.get_first_contiguity_loss(
+                    operator, dtype, row_count, current_label
+                )
+                if loss is not None:
+                    call_site, _ts = loss
+                    print()
+                    print("    Diagnosis:")
+                    print("      Array contiguity lost before this operation.")
+                    print(f"      First rl-observed call receiving non-contiguous "
+                          f"array: {call_site}")
+                    print("      Note: exact upstream cause requires manual "
+                          "inspection.")
+                    print("            RegressLens v0.1 identifies the first "
+                          "affected call site,")
+                    print("            not the operation that caused "
+                          "contiguity loss.")
+
+                    dtype_bytes = 8 if "float64" in dtype else 4
+                    fallback_samples = [
+                        rt for rt in current_samples[(operator, dtype, row_count)]
+                    ]
+                    accel_samples = _trace.get_contiguous_runtime_samples(
+                        operator, dtype, row_count
+                    )
+                    rem = _remediation.estimate_remediation(
+                        row_count, dtype_bytes, fallback_samples, accel_samples,
+                        safety_margin=args.remediation_margin,
+                    )
+                    print()
+                    print("    Remediation — contiguity fix:")
+                    if rem["reason"]:
+                        print(f"      {rem['reason']}")
+                    else:
+                        ms = lambda ns: f"{ns/1e6:.2f}ms"
+                        print(f"      Estimated copy cost:   {ms(rem['copy_cost_ns'])} "
+                              f"({row_count} {dtype} elements)")
+                        print(f"      Estimated savings:     "
+                              f"{ms(rem['estimated_savings_ns'])} per call")
+                        print(f"      Net estimated benefit: "
+                              f"{ms(rem['net_benefit_ns'])} per call")
+                        if rem["recommend_apply"]:
+                            print("      Recommendation: applying "
+                                  "np.ascontiguousarray() before this call is "
+                                  "likely worth it.")
+                        else:
+                            print("      Recommendation: copy cost likely "
+                                  "exceeds benefit for a single call — only "
+                                  "worth it if this array is reused many "
+                                  "times.")
+                        print("      RegressLens does not apply this "
+                              "automatically. Fix your pipeline's array "
+                              "handling directly (e.g. add "
+                              "np.ascontiguousarray() at the identified call "
+                              "site).")
             else:
                 print("    Status: within noise")
         print("  " + "\u2500" * 50)
@@ -266,6 +329,10 @@ def main(argv=None):
     p_check.add_argument("--script", required=True)
     p_check.add_argument("--min-pairs", type=int, default=20)
     p_check.add_argument("--threshold", type=float, default=0.05)
+    p_check.add_argument("--remediation-margin", type=float, default=2.0,
+                          help="only recommend applying a contiguity fix "
+                          "when estimated savings exceed copy cost by this "
+                          "multiple (default 2.0x, per the project brief)")
     p_check.set_defaults(func=cmd_check)
 
     p_profile = sub.add_parser("profile", help="operation-level breakdown")

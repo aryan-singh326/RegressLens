@@ -10,6 +10,7 @@ is not trying to be one.
 """
 import logging
 import os
+import time
 import numpy as np
 
 from . import _regresslens_native as _native
@@ -99,7 +100,19 @@ class array:
                 "regresslens: project_affine() on non-contiguous array, "
                 "falling back to NumPy"
             )
+            t0 = time.perf_counter_ns()
             result = self._data * scale + offset
+            t1 = time.perf_counter_ns()
+            _trace.record_trace(
+                operator="projection",
+                row_count=self._data.shape[0],
+                dtype=str(self._data.dtype),
+                contiguous=False,
+                selected_kernel="numpy_fallback",
+                runtime_ns=float(t1 - t0),
+                available_cores=os.cpu_count() or 1,
+                call_site=_trace.capture_call_site(),
+            )
             return array(result)
         result, kernel, runtime_ns = _native.project_affine_native(
             self._data, scale, offset
@@ -127,7 +140,21 @@ class array:
                 "regresslens: filter_gt() on non-contiguous array, "
                 "falling back to NumPy"
             )
+            t0 = time.perf_counter_ns()
             result = self._data[self._data > threshold]
+            t1 = time.perf_counter_ns()
+            n = self._data.shape[0]
+            _trace.record_trace(
+                operator="filter",
+                row_count=n,
+                dtype=str(self._data.dtype),
+                contiguous=False,
+                selected_kernel="numpy_fallback",
+                runtime_ns=float(t1 - t0),
+                available_cores=os.cpu_count() or 1,
+                selectivity=(len(result) / n) if n > 0 else None,
+                call_site=_trace.capture_call_site(),
+            )
             return array(result)
         full, count, kernel, runtime_ns = _native.filter_gt_native(
             self._data, threshold
@@ -165,13 +192,33 @@ class array:
                 "falling back to NumPy"
             )
             n = self._data.shape[0]
+            call_site = _trace.capture_call_site()
             if window == 0 or n < window:
+                _trace.record_trace(
+                    operator="rolling", row_count=n, dtype=str(self._data.dtype),
+                    contiguous=False, selected_kernel="numpy_fallback",
+                    runtime_ns=0.0, available_cores=os.cpu_count() or 1,
+                    window=window, call_site=call_site,
+                )
                 return array(np.array([], dtype=self._data.dtype))
             # np.convolve is the standard NumPy-only way to compute
             # this; used only on the fallback path, never the
             # accelerated one.
+            t0 = time.perf_counter_ns()
             kernel_win = np.ones(window, dtype=self._data.dtype)
             result = np.convolve(self._data, kernel_win, mode="valid")
+            t1 = time.perf_counter_ns()
+            _trace.record_trace(
+                operator="rolling",
+                row_count=n,
+                dtype=str(self._data.dtype),
+                contiguous=False,
+                selected_kernel="numpy_fallback",
+                runtime_ns=float(t1 - t0),
+                available_cores=os.cpu_count() or 1,
+                window=window,
+                call_site=call_site,
+            )
             return array(result)
         result, kernel, runtime_ns = _native.rolling_sum_native(self._data, window)
         logger.debug("regresslens: rolling_sum() used kernel=%s", kernel)
@@ -250,11 +297,22 @@ def _dispatch_sum(data, threads):
     if not data.flags["C_CONTIGUOUS"]:
         logger.debug(
             "regresslens: sum() on non-contiguous array, falling back to "
-            "NumPy. This is exactly the pattern the contiguity-loss "
-            "diagnosis feature (Phase 3 continuation) will flag instead "
-            "of silently falling back."
+            "NumPy."
         )
-        return float(np.sum(data))
+        t0 = time.perf_counter_ns()
+        result = float(np.sum(data))
+        t1 = time.perf_counter_ns()
+        _trace.record_trace(
+            operator="reduction",
+            row_count=data.shape[0],
+            dtype=str(data.dtype),
+            contiguous=False,
+            selected_kernel="numpy_fallback",
+            runtime_ns=float(t1 - t0),
+            available_cores=os.cpu_count() or 1,
+            call_site=_trace.capture_call_site(),
+        )
+        return result
     threads_override = -1 if threads is None else int(threads)
     value, kernel, runtime_ns = _native.reduce_sum_native(data, threads_override)
     logger.debug("regresslens: sum() used kernel=%s", kernel)
