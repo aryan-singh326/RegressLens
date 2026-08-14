@@ -32,16 +32,17 @@ class array:
     selector. Unsupported operations and non-contiguous arrays fall
     back to plain NumPy transparently.
 
-    Identity through operations: `regresslens.array` does NOT
-    currently return a `regresslens.array` from operations — `.sum()`
-    returns a plain float, matching NumPy's own `.sum()` return type
-    for a 1D array. There is no chained-operation identity to lose
-    yet, because only reduction is wired up so far. This will matter
-    once projection/filter/rolling are added (Phase 3 continuation)
-    and is called out explicitly here so it isn't assumed silently
-    correct later — see the project brief's note on `rd.array`
-    identity preservation being a correctness requirement, not a
-    nice-to-have.
+    Identity through operations: project_affine(), filter_gt(), and
+    rolling_sum()/rolling_mean() all return a NEW regresslens.array,
+    not a plain ndarray — so chained calls
+    (arr.project_affine(...).filter_gt(...)) stay accelerated at
+    every step instead of silently dropping back to plain NumPy after
+    the first operation. sum()/mean() return plain floats, matching
+    NumPy's own reduction return type — there's nothing to preserve
+    identity of once you're down to a scalar. This is tested
+    explicitly in test_array.py's TestIdentityPreservation, per the
+    project brief's requirement that silent acceleration loss is a
+    correctness bug, not a performance footnote.
     """
 
     __slots__ = ("_data",)
@@ -83,6 +84,72 @@ class array:
         if n == 0:
             raise ValueError("mean of empty array")
         return _dispatch_sum(self._data, threads) / n
+
+    def project_affine(self, scale, offset):
+        """out[i] = scale * self[i] + offset. Returns a new
+        regresslens.array — this is the representative elementwise
+        transform underlying ops like diff_log/zscore in the eventual
+        public API (see project brief); those aren't implemented as
+        named functions yet, this is the primitive they'll build on.
+        """
+        if not self._data.flags["C_CONTIGUOUS"]:
+            logger.debug(
+                "regresslens: project_affine() on non-contiguous array, "
+                "falling back to NumPy"
+            )
+            result = self._data * scale + offset
+            return array(result)
+        result, kernel = _native.project_affine_native(self._data, scale, offset)
+        logger.debug("regresslens: project_affine() used kernel=%s", kernel)
+        return array(result)
+
+    def filter_gt(self, threshold):
+        """Elements strictly greater than threshold, in order.
+        Returns a new regresslens.array sized to the actual match
+        count — not the worst-case allocation the native layer uses
+        internally, which is sliced away here before the caller ever
+        sees it."""
+        if not self._data.flags["C_CONTIGUOUS"]:
+            logger.debug(
+                "regresslens: filter_gt() on non-contiguous array, "
+                "falling back to NumPy"
+            )
+            result = self._data[self._data > threshold]
+            return array(result)
+        full, count, kernel = _native.filter_gt_native(self._data, threshold)
+        logger.debug(
+            "regresslens: filter_gt() used kernel=%s (matched %d/%d)",
+            kernel, count, len(self._data),
+        )
+        return array(full[:count])
+
+    def rolling_sum(self, window):
+        """Fixed-window rolling sum. Output length is
+        max(0, n - window + 1) — no partial windows, matching v0.1's
+        no-NaN-handling scope (a partial window would need a
+        sentinel). Returns a new regresslens.array."""
+        if not self._data.flags["C_CONTIGUOUS"]:
+            logger.debug(
+                "regresslens: rolling_sum() on non-contiguous array, "
+                "falling back to NumPy"
+            )
+            n = self._data.shape[0]
+            if window == 0 or n < window:
+                return array(np.array([], dtype=self._data.dtype))
+            # np.convolve is the standard NumPy-only way to compute
+            # this; used only on the fallback path, never the
+            # accelerated one.
+            kernel_win = np.ones(window, dtype=self._data.dtype)
+            result = np.convolve(self._data, kernel_win, mode="valid")
+            return array(result)
+        result, kernel = _native.rolling_sum_native(self._data, window)
+        logger.debug("regresslens: rolling_sum() used kernel=%s", kernel)
+        return array(result)
+
+    def rolling_mean(self, window):
+        """Fixed-window rolling mean. Returns a new regresslens.array."""
+        summed = self.rolling_sum(window)
+        return array(summed._data / window)
 
     # --- NumPy protocol handlers ---
     #
