@@ -22,7 +22,9 @@ import time
 
 logger = logging.getLogger("regresslens")
 
-_DEFAULT_DB_PATH = os.path.expanduser("~/.regresslens/traces.db")
+_DEFAULT_DB_PATH = os.environ.get(
+    "REGRESSLENS_DB_PATH", os.path.expanduser("~/.regresslens/traces.db")
+)
 
 # Tracing can be disabled entirely (e.g. for tests, or a user who
 # doesn't want disk writes on every call) without touching call
@@ -42,7 +44,8 @@ CREATE TABLE IF NOT EXISTS traces (
     selected_kernel TEXT NOT NULL,
     runtime_ns REAL NOT NULL,
     hardware_fingerprint TEXT NOT NULL,
-    timestamp REAL NOT NULL
+    timestamp REAL NOT NULL,
+    run_label TEXT
 );
 """
 
@@ -57,12 +60,24 @@ _local = threading.local()
 _write_lock = threading.Lock()
 
 
+def _migrate(conn):
+    """Adds columns introduced after the initial schema, for
+    databases created by an earlier version of RegressLens. A fresh
+    CREATE TABLE IF NOT EXISTS won't add columns to an existing
+    table — this is what actually handles that case."""
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(traces)")}
+    if "run_label" not in existing_cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN run_label TEXT")
+        conn.commit()
+
+
 def _get_connection(db_path):
     if not hasattr(_local, "conn") or getattr(_local, "db_path", None) != db_path:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         conn = sqlite3.connect(db_path)
         conn.execute(_SCHEMA)
         conn.commit()
+        _migrate(conn)
         _local.conn = conn
         _local.db_path = db_path
     return _local.conn
@@ -134,13 +149,24 @@ def record_trace(
     selectivity=None,
     window=None,
     db_path=None,
+    run_label=None,
 ):
     """Writes one trace row. Failures here are logged, not raised —
     a broken trace database should never be the reason a user's
     actual computation fails. This is observability infrastructure,
-    not the computation itself."""
+    not the computation itself.
+
+    run_label: identifies which baseline/check session this trace
+    belongs to. Defaults to the REGRESSLENS_RUN_LABEL environment
+    variable if not passed explicitly — this is how the CLI tags a
+    subprocess-run user script as part of a baseline or check session
+    without requiring any change to the user's own code.
+    """
     if not _TRACING_ENABLED:
         return
+
+    if run_label is None:
+        run_label = os.environ.get("REGRESSLENS_RUN_LABEL")
 
     path = db_path or _DEFAULT_DB_PATH
     try:
@@ -149,8 +175,8 @@ def record_trace(
             conn.execute(
                 "INSERT INTO traces (operator, row_count, dtype, contiguous, "
                 "selectivity, window, available_cores, selected_kernel, "
-                "runtime_ns, hardware_fingerprint, timestamp) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "runtime_ns, hardware_fingerprint, timestamp, run_label) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     operator,
                     row_count,
@@ -163,8 +189,63 @@ def record_trace(
                     runtime_ns,
                     get_hardware_fingerprint(),
                     time.time(),
+                    run_label,
                 ),
             )
             conn.commit()
     except Exception:
         logger.warning("regresslens: failed to write trace", exc_info=True)
+
+
+def get_hardware_fingerprints_for_label(run_label, db_path=None):
+    """Returns the set of distinct hardware_fingerprint values seen
+    across all traces under run_label. Used to detect two real
+    confounds: (1) baseline and current sessions run on different
+    hardware, and (2) a single session's own runs weren't even
+    consistent with each other (e.g. thermal throttling changed the
+    CPU's effective clock mid-session on shared/noisy infrastructure).
+    Per the project brief, these should be flagged, not silently
+    absorbed into the regression report as if they didn't happen.
+    """
+    path = db_path or _DEFAULT_DB_PATH
+    if not os.path.exists(path):
+        return set()
+    conn = sqlite3.connect(path)
+    conn.execute(_SCHEMA)
+    _migrate(conn)
+    rows = conn.execute(
+        "SELECT DISTINCT hardware_fingerprint FROM traces WHERE run_label = ?",
+        (run_label,),
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def get_samples(run_label, db_path=None):
+    """Returns {(operator, dtype, row_count): [runtime_ns, ...]} for
+    all traces tagged with the given run_label. This groups by
+    (operator, dtype, row_count) as an APPROXIMATION of "same call
+    site" — v0.1 does not yet do real call-site attribution via stack
+    capture (that's a separate, harder feature; see the project
+    brief's contiguity-attribution note for the closest analogue).
+    Two different call sites that happen to use the same operator,
+    dtype, and array size will be conflated here. This is a known,
+    documented limitation, not an oversight — worth revisiting once
+    real stack-based attribution exists.
+    """
+    path = db_path or _DEFAULT_DB_PATH
+    if not os.path.exists(path):
+        return {}
+    conn = sqlite3.connect(path)
+    conn.execute(_SCHEMA)
+    _migrate(conn)
+    rows = conn.execute(
+        "SELECT operator, dtype, row_count, runtime_ns FROM traces "
+        "WHERE run_label = ?",
+        (run_label,),
+    ).fetchall()
+
+    samples = {}
+    for operator, dtype, row_count, runtime_ns in rows:
+        key = (operator, dtype, row_count)
+        samples.setdefault(key, []).append(runtime_ns)
+    return samples
