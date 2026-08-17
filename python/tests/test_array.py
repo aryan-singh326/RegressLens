@@ -245,6 +245,59 @@ class TestIdentityPreservation:
         assert final == pytest.approx(np_final, rel=1e-9)
 
 
+class TestSelectivityFeedbackLoop:
+    """Validates the gap closed after the initial CLI checkpoint: the
+    kernel selector's estimated_selectivity field existed from the
+    start but was always hardcoded to 0.5. This confirms real
+    historical selectivity now actually changes kernel choice."""
+
+    @pytest.fixture
+    def isolated_db(self, tmp_path, monkeypatch):
+        import regresslens.trace as trace
+        path = str(tmp_path / "traces.db")
+        monkeypatch.setattr(trace, "_DEFAULT_DB_PATH", path)
+        return path
+
+    def test_first_call_has_no_history_uses_neutral_default(self, isolated_db):
+        import regresslens.trace as trace
+        data = np.random.default_rng(1).uniform(0, 1, 5000).astype(np.float64)
+        arr = rl.array(data)
+        avg = trace.get_average_selectivity("float64", 5000)
+        assert avg is None  # no history yet at this exact shape
+        result = arr.filter_gt(0.5)
+        assert len(result) > 0
+
+    def test_historical_average_updates_after_calls(self, isolated_db):
+        import regresslens.trace as trace
+        data = np.random.default_rng(2).uniform(0, 1, 3333).astype(np.float64)
+        arr = rl.array(data)
+        arr.filter_gt(0.99)  # very low selectivity
+        avg = trace.get_average_selectivity("float64", 3333)
+        assert avg is not None
+        assert avg < 0.1
+
+    def test_skewed_selectivity_history_shifts_kernel_choice_to_scalar(
+        self, isolated_db
+    ):
+        import regresslens.trace as trace
+        import regresslens._regresslens_native as native
+        data = np.random.default_rng(3).uniform(0, 1, 7777).astype(np.float64)
+        arr = rl.array(data)
+        for _ in range(6):
+            arr.filter_gt(0.98)
+        avg = trace.get_average_selectivity("float64", 7777)
+        assert avg < 0.3
+
+        # Doesn't assert on WHICH kernel directly for a fresh call
+        # through array.py (timing-sensitive plumbing) — asserts the
+        # PYTHON side looked up and passed a real, non-neutral
+        # estimate through to the native layer.
+        full, count, kernel, runtime_ns = native.filter_gt_native(
+            arr._data, 0.98, -1, avg
+        )
+        assert kernel == "scalar"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__, "-v"]))

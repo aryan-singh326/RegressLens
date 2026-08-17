@@ -74,6 +74,44 @@ static void test_filter_uses_mt_above_threshold_with_threads() {
     std::printf("test_filter_uses_mt_above_threshold_with_threads passed\n");
 }
 
+static void test_filter_uses_scalar_at_skewed_low_selectivity() {
+    SelectionContext ctx{Operation::Filter, regresslens::DType::Float64, 1000,
+                          true, 8};
+    ctx.estimated_selectivity = 0.05;  // ~5% match rate, outside the 0.3-0.7 band
+    CHECK(select_kernel(ctx) == KernelChoice::Scalar);
+    std::printf("test_filter_uses_scalar_at_skewed_low_selectivity passed\n");
+}
+
+static void test_filter_uses_scalar_at_skewed_high_selectivity() {
+    SelectionContext ctx{Operation::Filter, regresslens::DType::Float64, 1000,
+                          true, 8};
+    ctx.estimated_selectivity = 0.95;  // ~95% match rate, outside the band
+    CHECK(select_kernel(ctx) == KernelChoice::Scalar);
+    std::printf("test_filter_uses_scalar_at_skewed_high_selectivity passed\n");
+}
+
+static void test_filter_band_boundaries_are_inclusive() {
+    SelectionContext ctx{Operation::Filter, regresslens::DType::Float64, 1000,
+                          true, 8};
+    ctx.estimated_selectivity = 0.3;
+    CHECK(select_kernel(ctx) == KernelChoice::Avx2);
+    ctx.estimated_selectivity = 0.7;
+    CHECK(select_kernel(ctx) == KernelChoice::Avx2);
+    std::printf("test_filter_band_boundaries_are_inclusive passed\n");
+}
+
+static void test_filter_stays_scalar_even_at_high_n_when_selectivity_skewed() {
+    // MT-AVX2 must not override the selectivity decision — a
+    // skewed-selectivity filter should stay scalar regardless of
+    // size, since the underlying AVX2 kernel isn't favored here at
+    // all, MT or otherwise.
+    SelectionContext ctx{Operation::Filter, regresslens::DType::Float64,
+                          10'000'000, true, 8};
+    ctx.estimated_selectivity = 0.02;
+    CHECK(select_kernel(ctx) == KernelChoice::Scalar);
+    std::printf("test_filter_stays_scalar_even_at_high_n_when_selectivity_skewed passed\n");
+}
+
 int main() {
     test_projection_defaults_to_scalar();
     test_rolling_defaults_to_scalar();
@@ -82,6 +120,10 @@ int main() {
     test_reduction_stays_avx2_if_only_one_thread_available();
     test_filter_uses_avx2_by_default();
     test_filter_uses_mt_above_threshold_with_threads();
+    test_filter_uses_scalar_at_skewed_low_selectivity();
+    test_filter_uses_scalar_at_skewed_high_selectivity();
+    test_filter_band_boundaries_are_inclusive();
+    test_filter_stays_scalar_even_at_high_n_when_selectivity_skewed();
     std::printf("All kernel selector tests passed.\n");
     return 0;
 }

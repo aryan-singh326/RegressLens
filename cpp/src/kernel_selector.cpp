@@ -8,10 +8,15 @@
 //   - Reduction: AVX2 consistently beat scalar in sandbox testing.
 //   - Projection: memory-bandwidth-bound; AVX2 did NOT reliably
 //     beat scalar (sometimes slightly slower). Default to scalar.
-//   - Filter: AVX2 won specifically near ~50% selectivity; roughly
-//     tied or slightly behind at skewed selectivity. AVX2 chosen by
-//     default since the downside at skewed selectivity was small
-//     and the upside near 50% was large (~30%).
+//   - Filter: AVX2 won specifically near ~50% selectivity (~30%
+//     faster in sandbox benchmarks); roughly tied at 10%/90%
+//     selectivity, scalar sometimes slightly ahead there. Branches
+//     on ctx.estimated_selectivity accordingly (see below) — this
+//     is now a real, if still sandbox-derived, data-driven decision,
+//     not a flat default. Callers that don't have a real selectivity
+//     estimate pass 0.5 (the neutral assumption), which lands in the
+//     AVX2-favorable band, matching the previous flat-default
+//     behavior for anyone not yet supplying real history.
 //   - Rolling: scalar beat the AVX2 prefix-sum design outright in
 //     sandbox testing, due to sequential-pass + allocation overhead
 //     not being recovered by the vectorized second phase. Default
@@ -37,6 +42,14 @@ namespace {
 // Provisional. Not measured on real hardware.
 constexpr size_t kMtMinN = 5'000'000;
 
+// Provisional, from sandbox benchmarking only. AVX2's win over
+// scalar for filter was clearest in the 0.3-0.7 selectivity range;
+// outside that band the two were close enough that scalar's simpler
+// branch-predictor-friendly behavior at skewed selectivity makes it
+// the safer default. Revisit with real hardware data.
+constexpr double kFilterAvx2SelectivityLow = 0.3;
+constexpr double kFilterAvx2SelectivityHigh = 0.7;
+
 }  // namespace
 
 KernelChoice select_kernel(const SelectionContext& ctx) {
@@ -51,11 +64,18 @@ KernelChoice select_kernel(const SelectionContext& ctx) {
             // Memory-bandwidth-bound; AVX2 not confirmed to help.
             return KernelChoice::Scalar;
 
-        case Operation::Filter:
+        case Operation::Filter: {
+            bool selectivity_favors_avx2 =
+                ctx.estimated_selectivity >= kFilterAvx2SelectivityLow &&
+                ctx.estimated_selectivity <= kFilterAvx2SelectivityHigh;
+            if (!selectivity_favors_avx2) {
+                return KernelChoice::Scalar;
+            }
             if (ctx.n >= kMtMinN && ctx.available_threads > 1) {
                 return KernelChoice::MtAvx2;
             }
             return KernelChoice::Avx2;
+        }
 
         case Operation::Rolling:
             // AVX2 prefix-sum design lost to scalar in sandbox

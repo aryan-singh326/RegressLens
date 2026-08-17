@@ -197,7 +197,8 @@ size_t dispatch_filter_gt(const T* in, T* out, size_t n, T threshold,
     throw std::logic_error("unreachable: unknown KernelChoice");
 }
 
-py::tuple filter_gt_native(py::array arr, double threshold, int threads_override) {
+py::tuple filter_gt_native(py::array arr, double threshold, int threads_override,
+                            double estimated_selectivity) {
     ArrayInfo ai = get_array_info(arr, "filter_gt_native");
     unsigned hw_threads = std::thread::hardware_concurrency();
     if (hw_threads == 0) hw_threads = 1;
@@ -205,12 +206,17 @@ py::tuple filter_gt_native(py::array arr, double threshold, int threads_override
                                              : hw_threads;
 
     SelectionContext ctx{Operation::Filter, ai.dtype, ai.n, ai.contiguous, threads};
-    // v0.1 has no runtime selectivity estimate yet — the placeholder
-    // heuristic doesn't currently branch on it (see
-    // kernel_selector.cpp), but the field is populated honestly
-    // as "unknown/assumed" rather than silently defaulted, so this
-    // is the one place that assumption is visible.
-    ctx.estimated_selectivity = 0.5;
+    // estimated_selectivity now comes from the CALLER (the Python
+    // layer's trace-history lookup — see array.py's filter_gt),
+    // not a hardcoded assumption. -1 (or anything outside [0,1])
+    // means "no real estimate available", in which case 0.5 (the
+    // neutral middle of the AVX2-favorable band) is used, matching
+    // the previous flat-default behavior for callers without
+    // history yet.
+    ctx.estimated_selectivity =
+        (estimated_selectivity >= 0.0 && estimated_selectivity <= 1.0)
+            ? estimated_selectivity
+            : 0.5;
     KernelChoice choice = select_kernel(ctx);
 
     if (ai.dtype == DType::Float64) {
@@ -311,13 +317,16 @@ PYBIND11_MODULE(_regresslens_native, m) {
 
     m.def("filter_gt_native", &filter_gt_native, py::arg("array"),
           py::arg("threshold"), py::arg("threads_override") = -1,
+          py::arg("estimated_selectivity") = -1.0,
           "Threshold filter (strictly greater than) on a contiguous "
-          "float32/float64 NumPy array. Returns (full_capacity_array, "
-          "valid_count, kernel_name_used, runtime_ns) — caller must "
-          "slice to [:valid_count]; the returned array is allocated at "
-          "worst-case size (n) since filter's output size is "
-          "data-dependent and unknown before the kernel runs. Raises on "
-          "non-contiguous input.");
+          "float32/float64 NumPy array. estimated_selectivity (0.0-1.0, "
+          "or -1 for 'unknown') informs kernel selection — pass a "
+          "trace-history-derived estimate when available. Returns "
+          "(full_capacity_array, valid_count, kernel_name_used, "
+          "runtime_ns) — caller must slice to [:valid_count]; the "
+          "returned array is allocated at worst-case size (n) since "
+          "filter's output size is data-dependent and unknown before the "
+          "kernel runs. Raises on non-contiguous input.");
 
     m.def("rolling_sum_native", &rolling_sum_native, py::arg("array"),
           py::arg("window"),

@@ -15,11 +15,15 @@ rglns = "regresslens.cli:main"
 dev = ["pytest"]
 
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.8", "pybind11>=2.11"]
+build-backend = "scikit_build_core.build"
 
-[tool.setuptools]
-packages = ["regresslens"]
+[tool.scikit-build]
+# CMakeLists.txt lives alongside this pyproject.toml (python/), and
+# deliberately builds ONLY the native extension -- see that file's
+# header comment for why it's separate from cpp/CMakeLists.txt.
+cmake.source-dir = "."
+wheel.packages = ["regresslens"]
 
-[tool.setuptools.package-data]
-regresslens = ["*.so"]
+[tool.scikit-build.cmake.define]
+CMAKE_BUILD_TYPE = "Release"

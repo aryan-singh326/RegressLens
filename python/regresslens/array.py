@@ -156,14 +156,27 @@ class array:
                 call_site=_trace.capture_call_site(),
             )
             return array(result)
+        n = self._data.shape[0]
+        # Feedback loop: use real historical selectivity at this call
+        # shape if we have it, instead of always assuming 0.5. Falls
+        # back to -1 ("unknown") when there's no history yet, which
+        # the native layer treats as the neutral 0.5 default.
+        historical_selectivity = _trace.get_average_selectivity(
+            str(self._data.dtype), n
+        )
+        estimated_selectivity = (
+            historical_selectivity if historical_selectivity is not None else -1.0
+        )
         full, count, kernel, runtime_ns = _native.filter_gt_native(
-            self._data, threshold
+            self._data, threshold, -1, estimated_selectivity
         )
         logger.debug(
-            "regresslens: filter_gt() used kernel=%s (matched %d/%d)",
+            "regresslens: filter_gt() used kernel=%s (matched %d/%d, "
+            "estimated_selectivity=%s)",
             kernel, count, len(self._data),
+            f"{historical_selectivity:.3f}" if historical_selectivity is not None
+            else "unknown",
         )
-        n = self._data.shape[0]
         _trace.record_trace(
             operator="filter",
             row_count=n,

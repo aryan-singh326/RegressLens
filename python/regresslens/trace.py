@@ -324,3 +324,34 @@ def get_contiguous_runtime_samples(operator, dtype, row_count, db_path=None):
         (operator, dtype, row_count),
     ).fetchall()
     return [r[0] for r in rows]
+
+
+def get_average_selectivity(dtype, row_count, db_path=None):
+    """Returns the mean observed selectivity across all historical
+    filter traces matching (dtype, row_count), or None if there's no
+    history yet. This is the feedback loop the kernel selector's
+    'estimated_selectivity' field was designed for but did not use
+    until this was wired up: filter_gt() now looks up real historical
+    behavior at this call shape before choosing a kernel, instead of
+    assuming a flat 0.5 for every call regardless of what's actually
+    been observed.
+
+    Deliberately averages across ALL past runs (any run_label), same
+    reasoning as get_contiguous_runtime_samples: restricting to one
+    session would usually mean no data at all, and selectivity at a
+    given call shape is a property of the DATA distribution passing
+    through that call site, which is typically stable across runs of
+    the same pipeline.
+    """
+    path = db_path or _DEFAULT_DB_PATH
+    if not os.path.exists(path):
+        return None
+    conn = sqlite3.connect(path)
+    conn.execute(_SCHEMA)
+    _migrate(conn)
+    row = conn.execute(
+        "SELECT AVG(selectivity) FROM traces WHERE operator = 'filter' AND "
+        "dtype = ? AND row_count = ? AND selectivity IS NOT NULL",
+        (dtype, row_count),
+    ).fetchone()
+    return row[0] if row and row[0] is not None else None
