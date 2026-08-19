@@ -126,6 +126,7 @@ class array:
             selected_kernel=kernel,
             runtime_ns=runtime_ns,
             available_cores=os.cpu_count() or 1,
+            call_site=_trace.capture_call_site(),
         )
         return array(result)
 
@@ -191,6 +192,7 @@ class array:
             # is exactly the trace data a future selectivity-aware
             # heuristic would read from, once enough history exists.
             selectivity=(count / n) if n > 0 else None,
+            call_site=_trace.capture_call_site(),
         )
         return array(full[:count])
 
@@ -244,6 +246,7 @@ class array:
             runtime_ns=runtime_ns,
             available_cores=os.cpu_count() or 1,
             window=window,
+            call_site=_trace.capture_call_site(),
         )
         return array(result)
 
@@ -337,6 +340,7 @@ def _dispatch_sum(data, threads):
         selected_kernel=kernel,
         runtime_ns=runtime_ns,
         available_cores=os.cpu_count() or 1,
+        call_site=_trace.capture_call_site(),
     )
     return value
 
