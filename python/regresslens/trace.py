@@ -79,6 +79,23 @@ def _get_connection(db_path):
     if not hasattr(_local, "conn") or getattr(_local, "db_path", None) != db_path:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         conn = sqlite3.connect(db_path)
+        # WAL mode + synchronous=NORMAL: SQLite's default rollback-
+        # journal mode does an fsync on every commit, which measured
+        # at ~0.5ms per record_trace() call during Phase 4 validation
+        # — a meaningful fraction of a pipeline call that might only
+        # take a few ms itself. WAL mode defers most of that flush
+        # cost, trading a small, well-understood durability window
+        # (a handful of recent trace writes could be lost on an
+        # actual OS crash/power loss, NOT on a normal process crash —
+        # WAL is still crash-consistent for that) for substantially
+        # lower per-call latency. This is the standard recommended
+        # combination for write-heavy SQLite workloads, and it's an
+        # appropriate tradeoff here: trace data is observability,
+        # losing the last few rows on a true power-loss event is not
+        # the kind of correctness issue that matters for this
+        # database the way it would for the computation itself.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute(_SCHEMA)
         conn.commit()
         _migrate(conn)

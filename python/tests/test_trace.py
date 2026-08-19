@@ -155,6 +155,25 @@ class TestArrayIntegration:
         assert row[0] == 25
 
 
+class TestWALMode:
+    """Locks in the WAL-mode fix — added after measuring that the
+    default SQLite rollback-journal mode's per-commit fsync cost
+    (~0.5ms median) was a meaningful fraction of the Phase 4
+    validation pipeline's total per-call time. Confirms the pragma
+    actually took effect, not just that record_trace() doesn't
+    crash."""
+
+    def test_journal_mode_is_wal(self, temp_db):
+        trace.record_trace(
+            operator="reduction", row_count=100, dtype="float64",
+            contiguous=True, selected_kernel="avx2", runtime_ns=100.0,
+            available_cores=4, db_path=temp_db,
+        )
+        conn = sqlite3.connect(temp_db)
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert mode.lower() == "wal"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__, "-v"]))
