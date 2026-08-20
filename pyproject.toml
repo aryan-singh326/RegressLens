@@ -1,0 +1,36 @@
+[project]
+name = "regresslens"
+version = "0.1.0.dev0"
+description = "Performance regression intelligence for recurring scientific Python/NumPy pipelines"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.22",
+]
+license = {text = "Apache-2.0"}
+
+[project.scripts]
+rglns = "regresslens.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["scikit-build-core>=0.8", "pybind11>=2.11"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+# pyproject.toml lives at the REPO ROOT (not inside python/) so that
+# the sdist packaging root naturally includes both cpp/ and python/
+# as siblings, matching the real repo layout. An earlier version had
+# pyproject.toml inside python/, which meant the sdist silently
+# excluded ../cpp entirely -- caught by actually building a wheel
+# FROM the sdist (a true isolated round-trip), not just running
+# `pip install .` against a live git checkout, which happened to
+# keep working by coincidence since ../cpp physically exists on disk
+# in that case.
+cmake.source-dir = "python"
+wheel.packages = ["python/regresslens"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_BUILD_TYPE = "Release"
