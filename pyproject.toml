@@ -1,6 +1,6 @@
 [project]
 name = "regresslens"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Performance regression intelligence for recurring scientific Python/NumPy pipelines"
 readme = "README.md"
 requires-python = ">=3.9"
