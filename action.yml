@@ -33,8 +33,10 @@ inputs:
     description: Directory (inside the repository) to run in.
     default: "."
   regresslens-spec:
-    description: pip requirement used to install RegressLens.
-    default: "regresslens[accel]"
+    description: >-
+      pip requirement used to install RegressLens. Empty (the default): the pure
+      package from this action's own source, so action and package versions match.
+    default: ""
   comment:
     description: Post or update the PR comment ("true"/"false").
     default: "true"
@@ -60,7 +62,7 @@ runs:
       shell: bash
       env:
         SPEC: ${{ inputs.regresslens-spec }}
-      run: python -m pip install --disable-pip-version-check "$SPEC"
+      run: python -m pip install --disable-pip-version-check "${SPEC:-$GITHUB_ACTION_PATH/python}"
 
     - name: Compare base and head (interleaved)
       id: compare

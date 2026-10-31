@@ -1,0 +1,28 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "1cd92a1483227d26b5d770f1916549caca51f50b",
+    "subject": "Merge pull request #24085 from lysnikolaou/real-imag-remove"
+  },
+  "probability": 1.0,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "1cd92a1483227d26b5d770f1916549caca51f50b",
+      "subject": "Merge pull request #24085 from lysnikolaou/real-imag-remove"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 8.347235394056814e-50,
+  "effect": 0.4068409699468758,
+  "runs": 126,
+  "elapsed_s": 861.0959358215332,
+  "prior": "uniform prior (no commit touches the stack files of /rb/bench/numpy_26807.py:6: ['/rb/bench/numpy_26807.py'])",
+  "commits": 35,
+  "prior_files": [
+    "/rb/bench/numpy_26807.py"
+  ],
+  "prior_flagged": []
+}

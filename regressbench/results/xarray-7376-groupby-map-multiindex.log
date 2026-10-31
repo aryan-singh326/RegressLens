@@ -1,0 +1,2 @@
+xarray-7376-groupby-map-multiindex: definition ok
+  -> correct=True runs=38 elapsed=163s

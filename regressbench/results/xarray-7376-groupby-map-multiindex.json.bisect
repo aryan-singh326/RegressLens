@@ -1,0 +1,42 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "3ead17ea9e99283e2511b65b9d864d1c7b10b3c4",
+    "subject": "Explicit indexes (#5692)"
+  },
+  "probability": 1.0,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "3ead17ea9e99283e2511b65b9d864d1c7b10b3c4",
+      "subject": "Explicit indexes (#5692)"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 2.55606492360444e-17,
+  "effect": 19.091428046581363,
+  "runs": 38,
+  "elapsed_s": 161.80619955062866,
+  "prior": "attribution prior from xarray/core/duck_array_ops.py:286 concatenate: 10/35 commits touch its stack files ['xarray/core/concat.py', 'xarray/core/duck_array_ops.py', 'xarray/core/groupby.py', 'xarray/core/variable.py']",
+  "commits": 35,
+  "prior_files": [
+    "xarray/core/concat.py",
+    "xarray/core/duck_array_ops.py",
+    "xarray/core/groupby.py",
+    "xarray/core/variable.py"
+  ],
+  "prior_flagged": [
+    "cdab326bab0cf86f96bcce4292f4fae24bddc7b6",
+    "a01460bd90e3ae31a32e40005f33c2919efba8bb",
+    "229dad93e2c964c363afa4ab1673bb5b37151f7b",
+    "d535a3bf46ec26e3857bd0a350120107bb9a2199",
+    "3ead17ea9e99283e2511b65b9d864d1c7b10b3c4",
+    "03b6ba1e779b0d1829ca7b2e8f5da4d9c39ece6f",
+    "fed852073eee883c0ed1e13e28e508ff0cf9d5c1",
+    "83f238a05a82fc85dcd7346f758ba3bea0416181",
+    "321c5608a3be3cd4b6a4de3b658d1e2d164c0409",
+    "009b15461bf1ad4567e57742e44db4efa4e44cc7"
+  ]
+}

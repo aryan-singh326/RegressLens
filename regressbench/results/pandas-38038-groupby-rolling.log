@@ -1,0 +1,2 @@
+pandas-38038-groupby-rolling: definition ok
+  -> correct=True runs=126 elapsed=684s

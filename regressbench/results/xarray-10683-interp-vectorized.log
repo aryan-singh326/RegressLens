@@ -1,0 +1,2 @@
+xarray-10683-interp-vectorized: definition ok
+  -> correct=True runs=38 elapsed=57s

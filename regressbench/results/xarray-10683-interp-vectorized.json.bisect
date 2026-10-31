@@ -1,0 +1,35 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "29fe679a9fc4611af44e4889b992639dbf40cc91",
+    "subject": "Rewrite interp to use `apply_ufunc` (#9881)"
+  },
+  "probability": 0.9999999999997402,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "29fe679a9fc4611af44e4889b992639dbf40cc91",
+      "subject": "Rewrite interp to use `apply_ufunc` (#9881)"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 9.304580674066534e-13,
+  "effect": 2.9348672953934023,
+  "runs": 38,
+  "elapsed_s": 55.4521062374115,
+  "prior": "attribution prior from xarray/core/common.py:2055 is_np_datetime_like: 3/35 commits touch its stack files ['/rb/bench/xarray_10683.py', 'xarray/core/common.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py']",
+  "commits": 35,
+  "prior_files": [
+    "/rb/bench/xarray_10683.py",
+    "xarray/core/common.py",
+    "xarray/core/dataarray.py",
+    "xarray/core/dataset.py"
+  ],
+  "prior_flagged": [
+    "96e0ff7d70c605a1505ff89a2d62b5c4138b0305",
+    "755581c84dc2ad5435f0a9798e48115f80015f2d",
+    "29fe679a9fc4611af44e4889b992639dbf40cc91"
+  ]
+}

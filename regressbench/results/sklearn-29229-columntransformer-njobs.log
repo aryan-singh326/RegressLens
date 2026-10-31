@@ -1,0 +1,2 @@
+sklearn-29229-columntransformer-njobs: definition ok
+  -> correct=True runs=74 elapsed=684s

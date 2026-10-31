@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/aryansingh/RegressLens/blob/main/python/regresslens/telemetry_schema.json",
+  "$id": "https://github.com/aryan-singh326/RegressLens/blob/main/python/regresslens/telemetry_schema.json",
   "title": "RegressLens telemetry event (schema_version 1)",
   "description": "The complete content of one opt-in telemetry event. No other fields are ever sent.",
   "type": "object",

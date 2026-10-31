@@ -9,6 +9,10 @@ pip install regresslens              # pure Python, every platform
 pip install "regresslens[accel]"     # + native scalar/AVX2 kernels (binary wheels)
 ```
 
+This README describes 0.2.0, which is not on PyPI yet: PyPI has 0.1.0, the
+earlier design (see [History](#history)). Until 0.2.0 is published, install
+from a checkout with `python -m pip install ./cpp ./python`.
+
 RegressLens works without the native kernels; `[accel]` adds faster, more
 accurate kernels for `rl.array` and `--accelerate`, and a C fast path for
 observation. Wheels: Linux x86_64/aarch64 (manylinux_2_28), macOS x86_64/arm64,
@@ -28,14 +32,15 @@ runtime CPU detection, so the same wheel is safe on every CPU.
 | `rglns verify` | Checks the native kernels' accuracy against exact results. |
 
 GitHub Action (fails the check only on a `regression` verdict, one PR comment
-updated per push):
+updated per push). By default it installs RegressLens from the action's own
+source, so pin the action to a release tag once one exists:
 
 ```yaml
 - uses: actions/checkout@v4
   with: {fetch-depth: 0}
 - uses: actions/setup-python@v5
   with: {python-version: "3.12"}
-- uses: aryansingh/RegressLens@v1
+- uses: aryan-singh326/RegressLens@main
   with:
     command: python bench.py
     setup: pip install -e .
@@ -68,6 +73,7 @@ as accurate as NumPy (docs/accuracy.md).
 * [docs/telemetry.md](docs/telemetry.md): opt-in telemetry and its schema
 * [regressbench/](regressbench/README.md): real regressions with known culprits
 * [docs/novelty.md](docs/novelty.md): what is and is not new here
+* [ROADMAP.md](ROADMAP.md): what v0.1 planned for v0.2, and what happened to each item
 
 ## Development
 
@@ -76,5 +82,30 @@ python -m pip install ./cpp "./python[dev]"     # native kernels + package (edit
 python -m pytest python/tests -m "not slow"
 cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build && ctest --test-dir build
 ```
+
+## History
+
+0.1.0 (August 2026) was a single package: `rl.array` with scalar, AVX2 and
+multithreaded AVX2 kernels for four operations on x86-64 Linux, and
+`rglns baseline/check/profile` with per-call bootstrap intervals and Bonferroni
+correction. 0.2.0 splits it into a pure-Python package and an optional native
+one, observes unmodified code, and replaces the statistics (see
+[ROADMAP.md](ROADMAP.md)).
+
+v0.1's benchmark, kept for the record and not re-measured for 0.2: a mixed
+pipeline (`diff_log -> rolling_mean -> zscore -> filter_gt -> mean`) run 100
+times on two machines, with the output checked on every run.
+
+| | Correctness | RegressLens median | NumPy median | Bootstrap 95% CI |
+|---|---|---|---|---|
+| GitHub Codespaces | 100/100 exact matches | 13.5ms | 21.8ms | [-41.2%, -31.0%] |
+| Personal PC (WSL2) | 100/100 exact matches | 12.4ms | 17.0ms | [-30.2%, -20.0%] |
+
+Two notes from that phase still apply: the adaptive kernel-selection research
+question was deferred, and the selector stays behind one interface
+(`cpp/include/regresslens/kernel_selector.hpp`) so it can be replaced later;
+and validation caught a real SQLite performance bug (the default
+rollback-journal mode added ~0.5 ms of fsync per traced call), fixed with WAL
+mode.
 
 Apache-2.0.

@@ -6,7 +6,7 @@ packages and its apt packages.
 
 The repository is mounted read-only; results go to regressbench/results/
 (<case>.json, plus the raw bisect output <case>.json.bisect and the
-container log <case>.log, both git-ignored). RegressLens is installed with
+container log <case>.log). RegressLens is installed with
 --no-deps so the case's pinned NumPy stays in place: the 2020 pandas cases
 pin NumPy 1.19.5, the oldest with Python 3.9 wheels. Cases whose
 environment predates Python 3.9 (which RegressLens needs) are skipped.

@@ -46,7 +46,6 @@ jobs:
           command: python bench.py
           working-directory: ${{ env.EXAMPLE }}
           base-ref: main
-          regresslens-spec: ./python
           pr-number: "1"
           github-token: test-token
           api-url: http://127.0.0.1:8765
@@ -58,7 +57,6 @@ jobs:
           command: python bench.py
           working-directory: ${{ env.EXAMPLE }}
           base-ref: main
-          regresslens-spec: ./python
           pr-number: "1"
           github-token: test-token
           api-url: http://127.0.0.1:8765
@@ -73,7 +71,6 @@ jobs:
           command: python bench.py
           working-directory: ${{ env.EXAMPLE }}
           base-ref: main
-          regresslens-spec: ./python
           pr-number: "2"
           github-token: test-token
           api-url: http://127.0.0.1:8765

@@ -19,7 +19,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/aryansingh/RegressLens"
+Homepage = "https://github.com/aryan-singh326/RegressLens"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"

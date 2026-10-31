@@ -15,8 +15,6 @@ wheelhouse/
 
 # Local runs
 regressbench/.work/
-regressbench/results/*.bisect
-regressbench/results/*.log
 *.db
 *.db-wal
 *.db-shm

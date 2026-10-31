@@ -1,0 +1,41 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "be6a3bc46382074b5e233ac8d78b7a96a0c24bf5",
+    "subject": "BUG: groupby apply raises ValueError when groupby axis has duplicates and applied identity function (#30679)"
+  },
+  "probability": 1.0,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "be6a3bc46382074b5e233ac8d78b7a96a0c24bf5",
+      "subject": "BUG: groupby apply raises ValueError when groupby axis has duplicates and applied identity function (#30679)"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 7.900189777841245e-66,
+  "effect": 8.004311384344323,
+  "runs": 106,
+  "elapsed_s": 516.0516889095306,
+  "prior": "attribution prior from pandas/core/dtypes/missing.py:497 array_equivalent: 7/35 commits touch its stack files ['pandas/core/dtypes/missing.py', 'pandas/core/generic.py', 'pandas/core/groupby/generic.py', 'pandas/core/groupby/groupby.py', 'pandas/core/indexes/base.py', 'pandas/core/series.py']",
+  "commits": 35,
+  "prior_files": [
+    "pandas/core/dtypes/missing.py",
+    "pandas/core/generic.py",
+    "pandas/core/groupby/generic.py",
+    "pandas/core/groupby/groupby.py",
+    "pandas/core/indexes/base.py",
+    "pandas/core/series.py"
+  ],
+  "prior_flagged": [
+    "52c22b23a617148d229f946ce8301d1fc68c3ec4",
+    "7c94949dc89c62cae1bc647acd87266d6c3a0468",
+    "71b683305ae0267d05b51711567ea2744c6023de",
+    "be6a3bc46382074b5e233ac8d78b7a96a0c24bf5",
+    "06e416db9729517eadf0b5a9b46243789a4f2096",
+    "cd7c784aabc81eafa93d681f892a6256def9aa9e",
+    "7882aac45f92a0313e09e84dac0ac3f7d17ed899"
+  ]
+}

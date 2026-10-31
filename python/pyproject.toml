@@ -25,7 +25,7 @@ dev = ["pytest", "hypothesis"]
 rglns = "regresslens.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/aryansingh/RegressLens"
+Homepage = "https://github.com/aryan-singh326/RegressLens"
 
 [tool.setuptools.packages.find]
 include = ["regresslens*"]
