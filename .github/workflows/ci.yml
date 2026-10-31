@@ -20,19 +20,21 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         include:
+          # setup-python has no 3.9 build for Ubuntu 26.04 (ubuntu-latest)
+          - {os: ubuntu-24.04, python: "3.9"}
           - {os: ubuntu-24.04-arm, python: "3.12"}   # aarch64: scalar kernels only
           - {os: macos-14, python: "3.9"}            # arm64
           - {os: macos-14, python: "3.13"}
-          - {os: macos-13, python: "3.12"}           # x86_64
+          - {os: macos-15-intel, python: "3.12"}     # x86_64
           - {os: windows-latest, python: "3.9"}
           - {os: windows-latest, python: "3.13"}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Install regresslens-accel (from source) and regresslens
@@ -59,18 +61,18 @@ jobs:
     # the pseudo-file "<__array_function__ internals>", which observation
     # must treat as NumPy, not as user code.
     name: py${{ matrix.python }} numpy ${{ matrix.numpy }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {python: "3.9", numpy: "1.22.4"}   # the declared minimum
-          - {python: "3.10", numpy: "1.24.4"}  # last release before the C dispatcher
+          - {os: ubuntu-24.04, python: "3.9", numpy: "1.22.4"}    # the declared minimum
+          - {os: ubuntu-latest, python: "3.10", numpy: "1.24.4"}  # last before the C dispatcher
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - run: |
@@ -83,8 +85,8 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install ./cpp "./python[dev]"
@@ -102,8 +104,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-14]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install pybind11
@@ -114,23 +116,30 @@ jobs:
   isa-isolation:
     # No VEX instructions outside the AVX2 translation unit, and no COMDAT
     # shared between it and baseline code (tools/check_isa_isolation.py).
+    # ubuntu-latest (26.04, amd64v3) compiles for AVX2 by default, so this
+    # also checks that the build sets its baseline ISA explicitly. Without
+    # LTO, so that every object holds machine code to inspect.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install pybind11
-      - run: cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
+      - run: |
+          cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+          cmake --build build --parallel
       - run: python tools/check_isa_isolation.py build
 
   no-avx:
     # The plan's portability test: import and smoke tests on a CPU without
     # AVX (qemu -cpu Nehalem). 0.1.0.dev0 died with SIGILL at import here.
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04: on ubuntu-latest (26.04, amd64v3) the system's own
+    # libraries are built for AVX2 and cannot run on an emulated older CPU.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y qemu-user

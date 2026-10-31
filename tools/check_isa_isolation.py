@@ -11,7 +11,10 @@ Two ways an AVX2 instruction can reach a CPU without AVX2:
 This script checks both on a CMake build tree (GNU binutils; Linux CI):
 every object except kernels_avx2.cpp.o must have zero VEX instructions,
 and the weak/COMDAT symbols defined by kernels_avx2.cpp.o must not be
-defined by any other object linked into the extension.
+defined by any other object linked into the extension. Objects compiled
+with LTO hold bytecode, not machine code, and fail the check: configure
+the build with -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF (pybind11 then
+adds no LTO flags of its own).
 
 Usage: python tools/check_isa_isolation.py BUILD_DIR
 """
@@ -31,10 +34,22 @@ def objects(build_dir):
     return avx2, rest
 
 
-def vex_instructions(obj):
-    out = subprocess.run(["objdump", "-d", "--no-show-raw-insn", str(obj)],
-                         capture_output=True, text=True, check=True).stdout
-    return [m.group(1) for m in VEX.finditer(out)]
+INSN = re.compile(r"^\s+[0-9a-f]+:\t", re.M)
+
+
+def disassembly(obj):
+    return subprocess.run(["objdump", "-d", "--no-show-raw-insn", str(obj)],
+                          capture_output=True, text=True, check=True).stdout
+
+
+def lto_only(obj, asm):
+    """True for an object holding only LTO bytecode (-flto without fat
+    objects): it has no machine code yet, so nothing can be checked."""
+    if INSN.search(asm):
+        return False
+    headers = subprocess.run(["objdump", "-h", str(obj)],
+                             capture_output=True, text=True, check=True).stdout
+    return ".gnu.lto_" in headers
 
 
 def weak_symbols(obj):
@@ -60,7 +75,13 @@ def main(build_dir):
         return 2
     failures = 0
     for obj in rest:
-        vex = vex_instructions(obj)
+        asm = disassembly(obj)
+        if lto_only(obj, asm):
+            failures += 1
+            print(f"FAIL {obj.name}: LTO bytecode only, cannot be checked (configure with "
+                  "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF)")
+            continue
+        vex = [m.group(1) for m in VEX.finditer(asm)]
         if vex:
             failures += 1
             print(f"FAIL {obj.name}: {len(vex)} VEX instructions, e.g. {sorted(set(vex))[:5]}")

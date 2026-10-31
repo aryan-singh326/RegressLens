@@ -10,8 +10,12 @@ kernel sets:
 
 `src/dispatch.cpp` picks the AVX2 set at import only when the CPU reports AVX2
 and FMA and the OS saves YMM state: `__builtin_cpu_supports` on GCC/Clang,
-CPUID + XGETBV on MSVC. The bindings and every other file compile without
-architecture flags. `RGLNS_FORCE_KERNEL=scalar|avx2` forces one set; forcing
+CPUID + XGETBV on MSVC. The bindings and every other file are compiled for the
+x86-64 baseline. With GCC and Clang that is set explicitly (`-march=x86-64`),
+not left to the compiler's default: Ubuntu's amd64v3 variant (GitHub's
+`ubuntu-latest` since October 2026) and RHEL 10 default to x86-64-v3, which is
+AVX2, and on such a system the scalar kernels came out full of AVX
+instructions. `RGLNS_FORCE_KERNEL=scalar|avx2` forces one set; forcing
 avx2 where it is unavailable fails the import with a clear message instead of
 crashing later.
 
@@ -32,7 +36,10 @@ the AVX2-compiled one, baseline code runs AVX instructions. So the AVX2 headers
 use only `static inline` functions and C library calls, with no std containers
 or algorithms (temporary memory is a malloc-backed `RawBuffer`).
 `tools/check_isa_isolation.py` enforces this in CI: zero VEX instructions in
-baseline objects, and zero weak code symbols shared with the AVX2 object. With
+baseline objects, and zero weak code symbols shared with the AVX2 object. CI
+builds without LTO for this check: pybind11 compiles the bindings with `-flto`
+by default, which leaves bytecode rather than machine code in their object
+files, so the checker fails on such objects instead of passing them unseen. With
 GCC 13+ the AVX2 object has exactly one weak symbol, libstdc++'s empty
 `std::thread::_M_thread_deps_never_run()` (from the threaded kernels), which no
 baseline object defines and which compiles to a bare `ret`. The `no-avx` CI job

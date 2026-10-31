@@ -31,7 +31,12 @@ string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _rl_proc)
 if(CMAKE_OSX_ARCHITECTURES)
   string(TOLOWER "${CMAKE_OSX_ARCHITECTURES}" _rl_proc)
 endif()
-if(NOT REGRESSLENS_DISABLE_AVX2 AND _rl_proc MATCHES "^(x86_64|amd64|x64)$")
+if(_rl_proc MATCHES "^(x86_64|amd64|x64)$")
+  set(_rl_x86_64 ON)
+else()
+  set(_rl_x86_64 OFF)
+endif()
+if(_rl_x86_64 AND NOT REGRESSLENS_DISABLE_AVX2)
   set(REGRESSLENS_HAVE_AVX2_TU ON)
 else()
   set(REGRESSLENS_HAVE_AVX2_TU OFF)
@@ -55,6 +60,17 @@ if(MSVC)
   add_compile_options(/W3 /fp:precise)
 else()
   add_compile_options(-Wall -Wextra -ffp-contract=off)
+endif()
+
+# An explicit baseline ISA for all code on x86-64. Compilers may default
+# to more: Ubuntu's amd64v3 variant (GitHub's ubuntu-latest since October
+# 2026) and RHEL 10 target x86-64-v3, i.e. AVX2, which put AVX
+# instructions into the scalar kernels. These options come after
+# CMAKE_CXX_FLAGS, so they also override a -march=native there.
+# kernels_avx2.cpp and the AVX2 tests add -mavx2 -mfma on top. (MSVC's
+# default is SSE2.)
+if(_rl_x86_64 AND NOT MSVC)
+  add_compile_options(-march=x86-64)
 endif()
 
 find_package(Threads REQUIRED)
