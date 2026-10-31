@@ -1,303 +1,227 @@
-"""Tests for regresslens.array — the Python/NumPy integration layer.
-
-Run with: python3 -m pytest test_array.py -v
-"""
+"""rl.array: results, fallbacks, identity preservation, recording."""
 import numpy as np
 import pytest
 
 import regresslens as rl
+from regresslens import _accel, observe, store
 
 
-class TestArrayConstruction:
-    def test_wraps_float64(self):
-        arr = rl.array(np.array([1.0, 2.0, 3.0]))
-        assert arr.dtype == np.float64
+def _rows(op=None):
+    observe.flush()
+    conn = store.connect()
+    try:
+        sql = "SELECT operator, dtype, n, contiguous, kernel, count, extra_json FROM calls"
+        rows = conn.execute(sql).fetchall()
+    finally:
+        conn.close()
+    return [r for r in rows if op is None or r[0] == op]
 
-    def test_wraps_float32(self):
-        arr = rl.array(np.array([1.0, 2.0, 3.0], dtype=np.float32))
-        assert arr.dtype == np.float32
 
-    def test_rejects_unsupported_dtype(self):
+class TestConstruction:
+    def test_wraps_float64_and_float32(self):
+        assert rl.array(np.array([1.0, 2.0])).dtype == np.float64
+        assert rl.array(np.array([1.0], dtype=np.float32)).dtype == np.float32
+
+    @pytest.mark.parametrize("data", [np.array([1, 2, 3]), [1, 2, 3]])
+    def test_rejects_unsupported_dtype(self, data):
         with pytest.raises(rl.UnsupportedDTypeError):
-            rl.array(np.array([1, 2, 3], dtype=np.int64))
-
-    def test_rejects_unsupported_dtype_from_list(self):
-        # int64 is what plain Python ints coerce to by default.
-        with pytest.raises(rl.UnsupportedDTypeError):
-            rl.array([1, 2, 3])
+            rl.array(data)
 
 
-class TestSum:
-    def test_sum_matches_numpy_f64(self):
-        rng = np.random.default_rng(1)
-        data = rng.uniform(-1000, 1000, 50_000).astype(np.float64)
-        arr = rl.array(data)
-        assert arr.sum() == pytest.approx(np.sum(data), rel=1e-9)
+class TestReductions:
+    def test_sum_matches_numpy_and_dtype(self):
+        data = np.random.default_rng(1).uniform(-1000, 1000, 50_000)
+        out = rl.array(data).sum()
+        assert out == pytest.approx(np.sum(data), rel=1e-12)
+        assert isinstance(out, np.float64)
 
-    def test_sum_matches_numpy_f32(self):
-        rng = np.random.default_rng(2)
-        data = rng.uniform(-1000, 1000, 50_000).astype(np.float32)
-        arr = rl.array(data)
-        assert arr.sum() == pytest.approx(float(np.sum(data, dtype=np.float64)),
-                                           rel=1e-3)
+    def test_float32_sum_is_float32_and_accurate(self):
+        data = np.random.default_rng(2).uniform(-1000, 1000, 50_000).astype(np.float32)
+        out = rl.array(data).sum()
+        assert isinstance(out, np.float32)
+        assert out == pytest.approx(float(np.sum(data, dtype=np.float64)), rel=1e-6)
 
-    def test_mean_matches_numpy(self):
-        rng = np.random.default_rng(3)
-        data = rng.uniform(-1000, 1000, 10_000).astype(np.float64)
-        arr = rl.array(data)
-        assert arr.mean() == pytest.approx(np.mean(data), rel=1e-9)
+    def test_mean(self):
+        data = np.random.default_rng(3).uniform(-1000, 1000, 10_000)
+        assert rl.array(data).mean() == pytest.approx(np.mean(data), rel=1e-12)
 
-    def test_mean_of_empty_raises(self):
-        arr = rl.array(np.array([], dtype=np.float64))
+    def test_mean_of_empty_raises_and_sum_of_empty_is_zero(self):
+        empty = rl.array(np.array([], dtype=np.float64))
+        assert empty.sum() == 0.0
         with pytest.raises(ValueError):
-            arr.mean()
+            empty.mean()
 
-    def test_sum_of_empty_is_zero(self):
-        arr = rl.array(np.array([], dtype=np.float64))
-        assert arr.sum() == 0.0
+    def test_compensated_sum_beats_naive_cancellation(self, native):
+        data = np.array([1e16, 1.0, -1e16])
+        assert rl.array(data).sum() == 1.0
+
+    def test_nan_and_inf_follow_ieee(self):
+        assert np.isnan(rl.array(np.array([1.0, np.nan, 2.0])).sum())
+        assert rl.array(np.array([1.0, np.inf])).sum() == np.inf
+        assert np.isnan(rl.array(np.array([np.inf, 1.0, -np.inf])).sum())
+
+    def test_two_dimensional_input_falls_back_instead_of_crashing(self):
+        data = np.arange(12.0).reshape(3, 4)
+        assert rl.array(data).sum() == 66.0
+        assert rl.array(data).mean() == pytest.approx(5.5)
 
 
 class TestNumpyDispatch:
-    """These are the tests that actually matter: do NumPy's own
-    entry points route through RegressLens's kernels, or does
-    wrapping in rl.array just add overhead for nothing?"""
-
     def test_np_sum_is_intercepted(self):
-        rng = np.random.default_rng(4)
-        data = rng.uniform(-1000, 1000, 50_000).astype(np.float64)
-        arr = rl.array(data)
-        assert np.sum(arr) == pytest.approx(np.sum(data), rel=1e-9)
+        data = np.random.default_rng(4).uniform(-1, 1, 1000)
+        assert np.sum(rl.array(data)) == pytest.approx(np.sum(data), rel=1e-12)
+        assert any(r[0] == "reduction" for r in _rows())
 
-    def test_np_sum_with_axis_falls_back_not_errors(self):
-        # v0.1 only supports whole-array reduction. This must not
-        # crash — it must fall back to correct NumPy behavior.
+    def test_np_sum_with_axis_falls_back(self):
         data = np.array([[1.0, 2.0], [3.0, 4.0]])
-        arr = rl.array(data)
-        result = np.sum(arr, axis=0)
-        np.testing.assert_array_equal(result, np.sum(data, axis=0))
+        np.testing.assert_array_equal(np.sum(rl.array(data), axis=0), [4.0, 6.0])
 
-    def test_unsupported_ufunc_falls_back_correctly(self):
-        data = np.array([1.0, 4.0, 9.0, 16.0])
-        arr = rl.array(data)
-        result = np.sqrt(arr)
-        np.testing.assert_array_almost_equal(result, np.sqrt(data))
+    def test_ufuncs_fall_back(self):
+        a = rl.array(np.array([1.0, 4.0, 9.0]))
+        np.testing.assert_allclose(np.sqrt(a), [1.0, 2.0, 3.0])
+        np.testing.assert_array_equal(np.add(a, a), [2.0, 8.0, 18.0])
 
-    def test_binary_ufunc_between_two_wrapped_arrays(self):
-        a = rl.array(np.array([1.0, 2.0, 3.0]))
-        b = rl.array(np.array([10.0, 20.0, 30.0]))
-        result = np.add(a, b)
-        np.testing.assert_array_equal(result, [11.0, 22.0, 33.0])
+    def test_plain_ndarray_unaffected(self):
+        assert np.sum(np.array([1.0, 2.0, 3.0])) == 6.0
 
-    def test_array_function_dispatch_only_fires_for_wrapped_types(self):
-        # Sanity check on the dispatch mechanism itself: calling
-        # np.sum on a PLAIN ndarray must behave exactly as normal
-        # NumPy, completely unaffected by regresslens being imported.
+    def test_escape_hatches(self):
         data = np.array([1.0, 2.0, 3.0])
-        assert np.sum(data) == 6.0
+        assert rl.array(data).to_numpy() is data
+        np.testing.assert_array_equal(np.asarray(rl.array(data)), data)
 
 
-class TestNonContiguousFallback:
-    def test_sliced_array_falls_back_without_crashing(self):
-        rng = np.random.default_rng(5)
-        data = rng.uniform(-10, 10, 200).astype(np.float64)
-        sliced = data[::2]
-        assert not sliced.flags["C_CONTIGUOUS"]
-        arr = rl.array(sliced)
-        # Must not raise, must produce the correct answer via fallback.
-        assert arr.sum() == pytest.approx(np.sum(sliced), rel=1e-9)
+class TestElementwiseAndFilter:
+    def test_projection(self):
+        data = np.random.default_rng(10).uniform(-100, 100, 20_000)
+        out = rl.array(data).project_affine(2.5, -1.5)
+        assert isinstance(out, rl.array)
+        np.testing.assert_allclose(out.to_numpy(), 2.5 * data - 1.5, rtol=1e-15)
 
+    def test_filter(self):
+        data = np.random.default_rng(12).uniform(0, 1, 20_000)
+        out = rl.array(data).filter_gt(0.5)
+        np.testing.assert_array_equal(out.to_numpy(), data[data > 0.5])
 
-class TestEscapeHatch:
-    def test_to_numpy_returns_underlying_array(self):
-        data = np.array([1.0, 2.0, 3.0])
+    def test_filter_threshold_is_exclusive_and_nan_never_passes(self):
+        assert len(rl.array(np.array([5.0, 5.0])).filter_gt(5.0)) == 0
+        data = np.array([np.nan, 1.0, np.inf, -np.inf, 3.0])
+        np.testing.assert_array_equal(rl.array(data).filter_gt(0.0).to_numpy(),
+                                      [1.0, np.inf, 3.0])
+
+    @pytest.mark.parametrize("op", ["project_affine", "filter_gt"])
+    def test_non_contiguous_falls_back(self, op):
+        data = np.random.default_rng(13).uniform(0, 1, 400)[::2]
         arr = rl.array(data)
-        assert arr.to_numpy() is data
-
-    def test_np_asarray_works_via_array_protocol(self):
-        data = np.array([1.0, 2.0, 3.0])
-        arr = rl.array(data)
-        result = np.asarray(arr)
-        np.testing.assert_array_equal(result, data)
-
-
-class TestProjection:
-    def test_matches_numpy(self):
-        rng = np.random.default_rng(10)
-        data = rng.uniform(-100, 100, 20_000).astype(np.float64)
-        arr = rl.array(data)
-        result = arr.project_affine(2.5, -1.5)
-        expected = 2.5 * data - 1.5
-        np.testing.assert_allclose(result.to_numpy(), expected, rtol=1e-12)
-
-    def test_returns_regresslens_array(self):
-        arr = rl.array(np.array([1.0, 2.0, 3.0]))
-        result = arr.project_affine(2.0, 0.0)
-        assert isinstance(result, rl.array)
-
-    def test_non_contiguous_falls_back(self):
-        rng = np.random.default_rng(11)
-        data = rng.uniform(-10, 10, 200).astype(np.float64)
-        sliced = data[::2]
-        arr = rl.array(sliced)
-        result = arr.project_affine(3.0, 1.0)
-        expected = 3.0 * sliced + 1.0
-        np.testing.assert_allclose(result.to_numpy(), expected, rtol=1e-12)
-
-
-class TestFilter:
-    def test_matches_numpy(self):
-        rng = np.random.default_rng(12)
-        data = rng.uniform(0, 1, 20_000).astype(np.float64)
-        arr = rl.array(data)
-        result = arr.filter_gt(0.5)
-        expected = data[data > 0.5]
-        np.testing.assert_array_equal(result.to_numpy(), expected)
-
-    def test_returns_regresslens_array_sized_to_match_count(self):
-        data = np.array([1.0, 5.0, 2.0, 8.0, -3.0, 4.0])
-        arr = rl.array(data)
-        result = arr.filter_gt(3.0)
-        assert isinstance(result, rl.array)
-        assert len(result) == 3
-
-    def test_threshold_is_exclusive(self):
-        data = np.array([5.0, 5.0, 5.0])
-        arr = rl.array(data)
-        result = arr.filter_gt(5.0)
-        assert len(result) == 0
-
-    def test_non_contiguous_falls_back(self):
-        rng = np.random.default_rng(13)
-        data = rng.uniform(0, 1, 200).astype(np.float64)
-        sliced = data[::2]
-        arr = rl.array(sliced)
-        result = arr.filter_gt(0.5)
-        expected = sliced[sliced > 0.5]
-        np.testing.assert_array_equal(result.to_numpy(), expected)
+        out = arr.project_affine(3.0, 1.0) if op == "project_affine" else arr.filter_gt(0.5)
+        expected = 3.0 * data + 1.0 if op == "project_affine" else data[data > 0.5]
+        np.testing.assert_allclose(out.to_numpy(), expected)
+        kernels = {r[4] for r in _rows()}
+        assert kernels & {"numpy_fallback", "numpy"}
 
 
 class TestRolling:
-    def test_rolling_sum_matches_numpy_convolve(self):
-        rng = np.random.default_rng(14)
-        data = rng.uniform(-10, 10, 5000).astype(np.float64)
-        arr = rl.array(data)
-        result = arr.rolling_sum(20)
-        expected = np.convolve(data, np.ones(20), mode="valid")
-        np.testing.assert_allclose(result.to_numpy(), expected, rtol=1e-9)
+    def test_rolling_sum_matches_convolve(self):
+        data = np.random.default_rng(14).uniform(-10, 10, 5000)
+        out = rl.array(data).rolling_sum(20)
+        np.testing.assert_allclose(out.to_numpy(), np.convolve(data, np.ones(20), "valid"),
+                                   rtol=1e-12, atol=1e-12)
 
-    def test_rolling_mean(self):
+    def test_rolling_mean_and_var(self):
         data = np.array([2.0, 4.0, 6.0, 8.0])
-        arr = rl.array(data)
-        result = arr.rolling_mean(2)
-        np.testing.assert_allclose(result.to_numpy(), [3.0, 5.0, 7.0])
+        np.testing.assert_allclose(rl.array(data).rolling_mean(2).to_numpy(), [3.0, 5.0, 7.0])
+        np.testing.assert_allclose(rl.array(data).rolling_var(2).to_numpy(), [1.0, 1.0, 1.0])
+        np.testing.assert_allclose(rl.array(data).rolling_var(3, ddof=1).to_numpy(),
+                                   [4.0, 4.0])
 
-    def test_returns_regresslens_array(self):
-        arr = rl.array(np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
-        result = arr.rolling_sum(2)
-        assert isinstance(result, rl.array)
+    def test_window_larger_than_array_is_empty_and_window_zero_raises(self):
+        assert len(rl.array(np.array([1.0, 2.0])).rolling_sum(10)) == 0
+        with pytest.raises(ValueError):
+            rl.array(np.array([1.0, 2.0])).rolling_sum(0)
 
-    def test_window_larger_than_array_returns_empty(self):
-        arr = rl.array(np.array([1.0, 2.0, 3.0]))
-        result = arr.rolling_sum(10)
-        assert len(result) == 0
+    def test_single_nan_is_confined_to_its_windows(self):
+        """The Phase 4 defect: one NaN poisoned every later window
+        (35 of 37 here) where np.convolve confines it to 4."""
+        x = np.arange(1, 41, dtype=np.float64)
+        x[5] = np.nan
+        out = rl.array(x).rolling_sum(4).to_numpy()
+        ref = np.convolve(x, np.ones(4), mode="valid")
+        np.testing.assert_array_equal(np.isnan(out), np.isnan(ref))
+        assert int(np.isnan(out).sum()) == 4
 
-    def test_non_contiguous_falls_back(self):
-        rng = np.random.default_rng(15)
-        data = rng.uniform(-10, 10, 200).astype(np.float64)
-        sliced = data[::2]
-        arr = rl.array(sliced)
-        result = arr.rolling_sum(5)
-        expected = np.convolve(sliced, np.ones(5), mode="valid")
-        np.testing.assert_allclose(result.to_numpy(), expected, rtol=1e-9)
+    def test_price_like_variance_is_accurate(self):
+        """Adversarial case from the plan: mean 1e6, std 1e-2."""
+        x = np.random.default_rng(5).normal(1e6, 1e-2, 20_000)
+        out = rl.array(x).rolling_var(20).to_numpy()
+        ref = np.var(np.lib.stride_tricks.sliding_window_view(x, 20), axis=-1)
+        assert np.max(np.abs(out - ref) / ref) <= 1e-9
+
+    def test_non_contiguous_rolling(self):
+        data = np.random.default_rng(15).uniform(-10, 10, 200)[::2]
+        np.testing.assert_allclose(rl.array(data).rolling_sum(5).to_numpy(),
+                                   np.convolve(data, np.ones(5), "valid"), rtol=1e-12)
 
 
 class TestIdentityPreservation:
-    """The critical correctness requirement from the project brief:
-    silent acceleration loss mid-pipeline is a bug, not a performance
-    footnote. Every operation that returns an array (not a scalar)
-    must return a regresslens.array, not a plain ndarray — otherwise
-    a chain like .project_affine().filter_gt().rolling_mean() would
-    silently drop to unaccelerated NumPy after the first call."""
-
-    def test_full_chain_preserves_identity_at_every_step(self):
-        rng = np.random.default_rng(99)
-        data = rng.uniform(-10, 10, 5000).astype(np.float64)
-        arr = rl.array(data)
-
-        step1 = arr.project_affine(2.0, 1.0)
-        assert isinstance(step1, rl.array), "identity lost after project_affine"
-
+    def test_chain_stays_accelerated(self):
+        data = np.random.default_rng(99).uniform(-10, 10, 5000)
+        step1 = rl.array(data).project_affine(2.0, 1.0)
         step2 = step1.filter_gt(5.0)
-        assert isinstance(step2, rl.array), "identity lost after filter_gt"
-
         step3 = step2.rolling_mean(10)
-        assert isinstance(step3, rl.array), "identity lost after rolling_mean"
-
-        final = step3.sum()
-
-        # Independent pure-NumPy pipeline, built without reusing any
-        # RegressLens code, as ground truth.
-        np_step1 = 2.0 * data + 1.0
-        np_step2 = np_step1[np_step1 > 5.0]
-        np_step3 = np.convolve(np_step2, np.ones(10) / 10, mode="valid")
-        np_final = np.sum(np_step3)
-
-        assert final == pytest.approx(np_final, rel=1e-9)
+        assert all(isinstance(s, rl.array) for s in (step1, step2, step3))
+        np1 = 2.0 * data + 1.0
+        np2 = np1[np1 > 5.0]
+        np3 = np.convolve(np2, np.ones(10) / 10, mode="valid")
+        assert step3.sum() == pytest.approx(np.sum(np3), rel=1e-9)
 
 
-class TestSelectivityFeedbackLoop:
-    """Validates the gap closed after the initial CLI checkpoint: the
-    kernel selector's estimated_selectivity field existed from the
-    start but was always hardcoded to 0.5. This confirms real
-    historical selectivity now actually changes kernel choice."""
-
-    @pytest.fixture
-    def isolated_db(self, tmp_path, monkeypatch):
-        import regresslens.trace as trace
-        path = str(tmp_path / "traces.db")
-        monkeypatch.setattr(trace, "_DEFAULT_DB_PATH", path)
-        return path
-
-    def test_first_call_has_no_history_uses_neutral_default(self, isolated_db):
-        import regresslens.trace as trace
-        data = np.random.default_rng(1).uniform(0, 1, 5000).astype(np.float64)
+class TestRecording:
+    def test_calls_are_aggregated_not_written_per_call(self):
+        data = np.ones(1000)
         arr = rl.array(data)
-        avg = trace.get_average_selectivity("float64", 5000)
-        assert avg is None  # no history yet at this exact shape
-        result = arr.filter_gt(0.5)
-        assert len(result) > 0
+        for _ in range(50):
+            arr.sum()
+        conn = store.connect()
+        try:
+            assert conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
+        finally:
+            conn.close()
+        rows = _rows("reduction")
+        assert len(rows) == 1 and rows[0][5] == 50
 
-    def test_historical_average_updates_after_calls(self, isolated_db):
-        import regresslens.trace as trace
-        data = np.random.default_rng(2).uniform(0, 1, 3333).astype(np.float64)
-        arr = rl.array(data)
-        arr.filter_gt(0.99)  # very low selectivity
-        avg = trace.get_average_selectivity("float64", 3333)
-        assert avg is not None
-        assert avg < 0.1
+    def test_filter_records_selectivity_and_rolling_window(self):
+        rl.array(np.arange(10.0)).filter_gt(4.5)
+        rl.array(np.arange(100.0)).rolling_sum(25)
+        import json
+        by_op = {r[0]: json.loads(r[6]) for r in _rows()}
+        assert by_op["filter"]["sel_sum"] == pytest.approx(0.5)
+        assert by_op["rolling"]["window"] == 25
 
-    def test_skewed_selectivity_history_shifts_kernel_choice_to_scalar(
-        self, isolated_db
-    ):
-        import regresslens.trace as trace
-        import regresslens._regresslens_native as native
-        data = np.random.default_rng(3).uniform(0, 1, 7777).astype(np.float64)
+    def test_kernel_name_without_native_module(self, monkeypatch):
+        monkeypatch.setattr(_accel, "native", lambda: None)
+        assert rl.array(np.ones(10)).sum() == 10.0
+        assert {r[4] for r in _rows()} == {"numpy"}
+
+
+class TestSelectivityFeedback:
+    def test_history_is_recorded_per_call_site(self, native):
+        data = np.random.default_rng(3).uniform(0, 1, 7777)
         arr = rl.array(data)
         for _ in range(6):
-            arr.filter_gt(0.98)
-        avg = trace.get_average_selectivity("float64", 7777)
-        assert avg < 0.3
+            arr.filter_gt(0.98)  # ~2% selectivity, always from this one line
+        observe.flush()
+        conn = store.connect()
+        try:
+            sites = {r[0] for r in conn.execute(
+                "SELECT call_site_id FROM calls WHERE operator = 'filter'")}
+            assert len(sites) == 1
+            total, count = store.site_selectivity_history(conn, sites.pop())
+        finally:
+            conn.close()
+        assert count == 6 and total / count < 0.05
 
-        # Doesn't assert on WHICH kernel directly for a fresh call
-        # through array.py (timing-sensitive plumbing) — asserts the
-        # PYTHON side looked up and passed a real, non-neutral
-        # estimate through to the native layer.
-        full, count, kernel, runtime_ns = native.filter_gt_native(
-            arr._data, 0.98, -1, avg
-        )
+    def test_skewed_history_selects_scalar_kernel(self, avx2):
+        data = np.random.default_rng(3).uniform(0, 1, 7777)
+        _, _, kernel, _ = avx2.filter_gt(data, 0.98, "auto", 0, 0.02)
         assert kernel == "scalar"
-
-
-if __name__ == "__main__":
-    import sys
-    sys.exit(pytest.main([__file__, "-v"]))
+        _, _, kernel, _ = avx2.filter_gt(data, 0.5, "auto", 0, 0.5)
+        assert kernel == "avx2"

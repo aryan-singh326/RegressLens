@@ -1,0 +1,55 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "regresslens-accel"
+version = "0.2.0"
+description = "Optional native (scalar + AVX2) kernels for RegressLens"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = ["numpy>=1.22"]
+classifiers = [
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.urls]
+Homepage = "https://github.com/aryansingh/RegressLens"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.20"
+cmake.build-type = "Release"
+wheel.packages = ["regresslens_accel"]
+# Development tools stay out of the wheel build (no gbench fetch, no tests).
+# CMAKE_BUILD_TYPE is explicit because single-config generators on Windows
+# (NMake, used when only the VS Build Tools are installed) default MSVC
+# builds to Debug otherwise.
+cmake.define = { CMAKE_BUILD_TYPE = "Release", REGRESSLENS_BUILD_TESTS = "OFF", REGRESSLENS_BUILD_CHARACTERIZE = "OFF", REGRESSLENS_BUILD_BENCH = "OFF" }
+sdist.exclude = ["build/", "bench/results/"]
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+skip = "*-musllinux_* *-win32 *_i686 pp*"
+build-verbosity = 1
+# The full Python suite runs against every built wheel, including a
+# pass with the AVX2 kernels disabled (RGLNS_FORCE_KERNEL=scalar).
+test-requires = ["pytest", "hypothesis"]
+test-command = "python {project}/tools/run_wheel_tests.py {project}"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+
+[tool.cibuildwheel.macos]
+# Built natively on separate x86_64 and arm64 runners; no universal2.
+archs = ["native"]
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]

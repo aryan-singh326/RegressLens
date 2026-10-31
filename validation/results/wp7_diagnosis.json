@@ -1,0 +1,50 @@
+{
+  "strided": {
+    "expected": "contiguity_loss",
+    "correct_rate": 1.0,
+    "tops": {
+      "contiguity_loss": 30
+    }
+  },
+  "float64": {
+    "expected": "dtype_promotion",
+    "correct_rate": 1.0,
+    "tops": {
+      "dtype_promotion": 30
+    }
+  },
+  "bigger": {
+    "expected": "size_regime",
+    "correct_rate": 1.0,
+    "tops": {
+      "size_regime": 30
+    }
+  },
+  "selectivity": {
+    "expected": "kernel_selection",
+    "correct_rate": 0.9666666666666667,
+    "tops": {
+      "environment_drift": 1,
+      "kernel_selection": 29
+    }
+  },
+  "hog": {
+    "expected": "environment_drift",
+    "correct_rate": 1.0,
+    "tops": {
+      "environment_drift": 30
+    }
+  },
+  "none": {
+    "expected": null,
+    "correct_rate": 1.0,
+    "tops": {
+      "None": 30
+    }
+  },
+  "_meta": {
+    "when": "2026-10-11 10:51",
+    "python": "3.14.7",
+    "machine": "Intel(R) Core(TM) Ultra 7 255U (14 threads, Windows)"
+  }
+}

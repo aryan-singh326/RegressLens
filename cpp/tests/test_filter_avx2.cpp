@@ -11,14 +11,7 @@
 #include "regresslens/filter_avx2.hpp"
 #include "regresslens/filter_scalar.hpp"
 
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
+#include "test_util.hpp"
 
 template <typename T>
 static void check_matches_scalar(const char* label, size_t n, double selectivity) {
@@ -75,6 +68,7 @@ static void test_edge_cases() {
 }
 
 int main() {
+    SKIP_UNLESS_AVX2();
     test_edge_cases();
 
     for (size_t n : {size_t(0), size_t(1), size_t(3), size_t(4), size_t(5),

@@ -1,184 +1,149 @@
-// Unified Phase 1 characterization driver.
+// Kernel characterization driver.
 //
-// This is NOT a Google Benchmark target — it's a standalone binary
-// that sweeps every implemented kernel across the array sizes and
-// (where relevant) selectivities/windows called for in the project
-// brief's characterization table, and writes a CSV. Run this on the
-// dedicated-tenancy hardware, not in a shared/cloud VM — see the
-// project's own hardware fingerprinting requirement. The numbers
-// from this sandbox are not valid characterization data; only the
-// mechanism (does it run, does it produce sane output) has been
-// verified here.
+// Sweeps every shipped kernel set across array sizes (and selectivity
+// or window where relevant) and writes a CSV to stdout. Feed the CSV
+// to derive_thresholds.py to re-derive the kernel selector's
+// thresholds (src/kernel_selector.cpp).
 //
-// Output columns: operation,kernel,dtype,n,window_or_selectivity,
-//                 median_ns,warm_or_cold,threads
+// This binary is compiled WITHOUT architecture flags and reaches the
+// kernels only through the runtime kernel tables, so "scalar" here is
+// the portable scalar build that ships. The pre-0.2 driver was
+// compiled with -mavx2 -mfma for the whole executable, which let the
+// compiler auto-vectorize the "scalar" loops with AVX2 and confounded
+// the projection result ("AVX2 doesn't beat scalar").
 //
-// This is a starting point, not the final harness — it does not yet
-// do bootstrap CI, warm/cold separation, or hardware fingerprinting
-// (all called for in the Phase 1 spec). Those are the next things
-// to add once this runs cleanly on real hardware and you've
-// confirmed the sweep dimensions are the right ones.
+// Run on quiet, dedicated hardware. Shared or cloud VMs give
+// directionally useful data at best.
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <random>
+#include <string>
 #include <thread>
 #include <vector>
 
-#include "regresslens/filter_avx2.hpp"
-#include "regresslens/filter_mt_avx2.hpp"
-#include "regresslens/filter_scalar.hpp"
-#include "regresslens/projection_avx2.hpp"
-#include "regresslens/projection_scalar.hpp"
-#include "regresslens/reduction_avx2.hpp"
-#include "regresslens/reduction_mt_avx2.hpp"
-#include "regresslens/reduction_scalar.hpp"
-#include "regresslens/rolling_avx2.hpp"
-#include "regresslens/rolling_scalar.hpp"
+#include "regresslens/cpu_features.hpp"
+#include "regresslens/dispatch.hpp"
+#include "regresslens/kernels.hpp"
 
+using namespace regresslens;
 using Clock = std::chrono::steady_clock;
 
-static double median_of(std::vector<double>& v) {
-    std::sort(v.begin(), v.end());
-    size_t mid = v.size() / 2;
-    return v.size() % 2 == 0 ? (v[mid - 1] + v[mid]) / 2.0 : v[mid];
-}
+namespace {
 
-// Runs `fn` `reps` times, returns the median wall-clock time in ns.
-// Not a substitute for the bootstrap-CI methodology the actual
-// product uses (see project brief) — this is characterization
-// tooling for building the heuristic, not the shipped regression
-// detector.
+struct Timing {
+    double median, p10, p90;
+};
+
 template <typename Fn>
-static double time_median_ns(Fn&& fn, int reps = 15) {
+Timing time_kernel(Fn&& fn, int reps) {
+    fn();  // warm caches, page in buffers, spin up the core
     std::vector<double> samples;
     samples.reserve(reps);
     for (int r = 0; r < reps; ++r) {
         auto t0 = Clock::now();
         fn();
         auto t1 = Clock::now();
-        samples.push_back(
-            std::chrono::duration<double, std::nano>(t1 - t0).count());
+        samples.push_back(std::chrono::duration<double, std::nano>(t1 - t0).count());
     }
-    return median_of(samples);
+    std::sort(samples.begin(), samples.end());
+    auto at = [&](double q) { return samples[static_cast<size_t>(q * (samples.size() - 1))]; };
+    return Timing{at(0.5), at(0.1), at(0.9)};
 }
 
-static std::vector<double> make_data(size_t n, unsigned seed = 42) {
-    std::mt19937 rng(seed);
-    std::uniform_real_distribution<double> dist(-1000.0, 1000.0);
-    std::vector<double> data(n);
-    for (auto& v : data) v = dist(rng);
-    return data;
+template <typename T>
+const OpTable<T>& table_for(const KernelSet& set);
+template <>
+const OpTable<float>& table_for<float>(const KernelSet& set) { return set.f32; }
+template <>
+const OpTable<double>& table_for<double>(const KernelSet& set) { return set.f64; }
+
+int reps_for(size_t n) { return n >= 10'000'000 ? 9 : n >= 1'000'000 ? 21 : 51; }
+
+volatile double g_sink;  // defeats dead-code elimination
+
+void emit(const char* op, const char* kernel, const char* dtype, size_t n,
+          const std::string& param, const Timing& t, int reps) {
+    std::printf("%s,%s,%s,%zu,%s,%.1f,%.1f,%.1f,%d\n", op, kernel, dtype, n,
+                param.c_str(), t.median, t.p10, t.p90, reps);
+    std::fflush(stdout);
 }
+
+template <typename T>
+void sweep(const char* dtype, const std::vector<const KernelSet*>& sets, unsigned threads) {
+    const std::vector<size_t> sizes = {10'000, 100'000, 1'000'000, 4'000'000, 8'000'000,
+                                       18'000'000};
+    for (size_t n : sizes) {
+        const int reps = reps_for(n);
+        std::mt19937 rng(42);
+        std::uniform_real_distribution<double> dist(-1000.0, 1000.0);
+        std::vector<T> data(n), out(n);
+        for (auto& v : data) v = static_cast<T>(dist(rng));
+
+        for (const KernelSet* ks : sets) {
+            const OpTable<T>& t = table_for<T>(*ks);
+            emit("reduction", ks->name, dtype, n, "",
+                 time_kernel([&] { g_sink = t.sum(data.data(), n).s; }, reps), reps);
+            if (t.sum_mt) {
+                emit("reduction", "mt_avx2", dtype, n, "threads=" + std::to_string(threads),
+                     time_kernel([&] { g_sink = t.sum_mt(data.data(), n, threads).s; }, reps),
+                     reps);
+            }
+            emit("projection", ks->name, dtype, n, "",
+                 time_kernel([&] { t.project_affine(data.data(), out.data(), n, T(2), T(1)); },
+                             reps),
+                 reps);
+            for (size_t window : {size_t(5), size_t(20), size_t(500)}) {
+                emit("rolling", ks->name, dtype, n, "window=" + std::to_string(window),
+                     time_kernel([&] { t.rolling_sum(data.data(), out.data(), n, window); },
+                                 reps),
+                     reps);
+            }
+        }
+
+        // Filter: performance depends on selectivity (branch
+        // predictability and output volume), not just n.
+        std::uniform_real_distribution<double> unit(0.0, 1.0);
+        std::vector<T> u(n);
+        for (auto& v : u) v = static_cast<T>(unit(rng));
+        for (double sel : {0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95}) {
+            const T threshold = static_cast<T>(1.0 - sel);
+            char param[32];
+            std::snprintf(param, sizeof param, "sel=%.2f", sel);
+            for (const KernelSet* ks : sets) {
+                const OpTable<T>& t = table_for<T>(*ks);
+                emit("filter", ks->name, dtype, n, param,
+                     time_kernel([&] { g_sink = (double)t.filter_gt(u.data(), out.data(), n, threshold); },
+                                 reps),
+                     reps);
+                if (t.filter_gt_mt) {
+                    emit("filter", "mt_avx2", dtype, n,
+                         std::string(param) + "+threads=" + std::to_string(threads),
+                         time_kernel([&] {
+                             g_sink = (double)t.filter_gt_mt(u.data(), out.data(), n,
+                                                             threshold, threads);
+                         }, reps),
+                         reps);
+                }
+            }
+        }
+    }
+}
+
+}  // namespace
 
 int main() {
-    std::printf("operation,kernel,dtype,n,param,median_ns\n");
+    const Runtime& rt = runtime();
+    unsigned threads = std::thread::hardware_concurrency();
+    if (threads == 0) threads = 4;
+    std::printf("# regresslens characterize\n");
+    std::printf("# cpu_avx2_fma=%d avx2_compiled=%d hardware_threads=%u\n", rt.cpu_avx2,
+                rt.avx2_compiled, threads);
+    std::printf("operation,kernel,dtype,n,param,median_ns,p10_ns,p90_ns,reps\n");
 
-    const std::vector<size_t> sizes = {10'000, 100'000, 1'000'000, 18'000'000};
-    unsigned hw_threads = std::thread::hardware_concurrency();
-    if (hw_threads == 0) hw_threads = 4;
-
-    // --- Reduction ---
-    for (size_t n : sizes) {
-        auto data = make_data(n);
-        std::vector<double> out(n);
-
-        double t_scalar = time_median_ns([&]() {
-            volatile double r = regresslens::reduce_sum_scalar<double>(data.data(), n);
-            (void)r;
-        });
-        std::printf("reduction,scalar,f64,%zu,,%f\n", n, t_scalar);
-
-        double t_avx2 = time_median_ns([&]() {
-            volatile double r = regresslens::reduce_sum_avx2(data.data(), n);
-            (void)r;
-        });
-        std::printf("reduction,avx2,f64,%zu,,%f\n", n, t_avx2);
-
-        double t_mt = time_median_ns([&]() {
-            volatile double r =
-                regresslens::reduce_sum_mt_avx2<double>(data.data(), n, hw_threads);
-            (void)r;
-        });
-        std::printf("reduction,mt_avx2,f64,%zu,threads=%u,%f\n", n, hw_threads, t_mt);
-    }
-
-    // --- Projection ---
-    for (size_t n : sizes) {
-        auto data = make_data(n);
-        std::vector<double> out(n);
-
-        double t_scalar = time_median_ns([&]() {
-            regresslens::project_affine_scalar<double>(data.data(), out.data(), n,
-                                                         2.0, 1.0);
-        });
-        std::printf("projection,scalar,f64,%zu,,%f\n", n, t_scalar);
-
-        double t_avx2 = time_median_ns([&]() {
-            regresslens::project_affine_avx2(data.data(), out.data(), n, 2.0, 1.0);
-        });
-        std::printf("projection,avx2,f64,%zu,,%f\n", n, t_avx2);
-    }
-
-    // --- Filter (across selectivities) ---
-    for (size_t n : sizes) {
-        for (double sel : {0.1, 0.5, 0.9}) {
-            std::mt19937 rng(7);
-            std::uniform_real_distribution<double> dist(0.0, 1.0);
-            std::vector<double> in(n);
-            for (auto& v : in) v = dist(rng);
-            double threshold = 1.0 - sel;
-            std::vector<double> out(n);
-
-            char param[32];
-            std::snprintf(param, sizeof(param), "sel=%.1f", sel);
-
-            double t_scalar = time_median_ns([&]() {
-                volatile size_t c =
-                    regresslens::filter_gt_scalar<double>(in.data(), out.data(), n, threshold);
-                (void)c;
-            });
-            std::printf("filter,scalar,f64,%zu,%s,%f\n", n, param, t_scalar);
-
-            double t_avx2 = time_median_ns([&]() {
-                volatile size_t c = regresslens::filter_gt_avx2(in.data(), out.data(), n, threshold);
-                (void)c;
-            });
-            std::printf("filter,avx2,f64,%zu,%s,%f\n", n, param, t_avx2);
-
-            double t_mt = time_median_ns([&]() {
-                volatile size_t c = regresslens::filter_gt_mt_avx2<double>(
-                    in.data(), out.data(), n, threshold, hw_threads);
-                (void)c;
-            });
-            std::printf("filter,mt_avx2,f64,%zu,%s+threads=%u,%f\n", n, param,
-                         hw_threads, t_mt);
-        }
-    }
-
-    // --- Rolling (across windows) ---
-    for (size_t n : sizes) {
-        for (size_t window : {size_t(5), size_t(20), size_t(500)}) {
-            if (window > n) continue;
-            auto in = make_data(n);
-            std::vector<double> out(n);
-            char param[32];
-            std::snprintf(param, sizeof(param), "window=%zu", window);
-
-            double t_scalar = time_median_ns([&]() {
-                volatile size_t c =
-                    regresslens::rolling_sum_scalar<double>(in.data(), out.data(), n, window);
-                (void)c;
-            });
-            std::printf("rolling,scalar,f64,%zu,%s,%f\n", n, param, t_scalar);
-
-            double t_avx2 = time_median_ns([&]() {
-                volatile size_t c = regresslens::rolling_sum_avx2(in.data(), out.data(), n, window);
-                (void)c;
-            });
-            std::printf("rolling,avx2,f64,%zu,%s,%f\n", n, param, t_avx2);
-        }
-    }
-
+    std::vector<const KernelSet*> sets = {&scalar_kernel_set()};
+    if (rt.avx2) sets.push_back(rt.avx2);
+    sweep<double>("f64", sets, threads);
+    sweep<float>("f32", sets, threads);
     return 0;
 }

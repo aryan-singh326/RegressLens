@@ -1,0 +1,32 @@
+{
+  "id": "pandas-36757-groupby-fillna",
+  "project": "pandas",
+  "repo": "https://github.com/pandas-dev/pandas.git",
+  "issue": "https://github.com/pandas-dev/pandas/issues/36757",
+  "summary": "groupby(...).fillna(method='ffill') with a duplicated index: ~400x slower",
+  "culprit": {
+    "sha": "be6a3bc46382074b5e233ac8d78b7a96a0c24bf5",
+    "pr": 30679,
+    "subject": "BUG: groupby apply raises ValueError when groupby axis has duplicates and applied identity function (#30679)"
+  },
+  "expected_first_parent": "be6a3bc46382074b5e233ac8d78b7a96a0c24bf5",
+  "good": "55cfabb630b2c205bd25fcaf999d85beaf7f7163",
+  "bad": "469b4b71fd2eaf9c04b40e270ceec2f1dd7961ce",
+  "fixed_by": [
+    "https://github.com/pandas-dev/pandas/pull/37149"
+  ],
+  "build": "C extensions (setup.py); every visit rebuilds",
+  "setup": "python setup.py build_ext --inplace -j 4 -q",
+  "environment": {
+    "python": "3.9",
+    "pip": [
+      "numpy==1.19.5",
+      "cython==0.29.21",
+      "python-dateutil",
+      "pytz",
+      "setuptools<60"
+    ],
+    "note": "Python 3.9 is RegressLens's minimum; NumPy 1.19.5 is the oldest with 3.9 wheels"
+  },
+  "bench": "pandas_36757.py"
+}

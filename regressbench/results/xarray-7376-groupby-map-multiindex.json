@@ -1,0 +1,18 @@
+{
+  "id": "xarray-7376-groupby-map-multiindex",
+  "elapsed_s": 162.60811686515808,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: 3ead17ea9e Explicit indexes (#5692) (p = 1.000, effect +1909.1%)\n  95% credible set (1 commit): 3ead17ea9e\n  38 runs over 35 commits in 162 s; attribution prior from xarray/core/duck_array_ops.py:286 concatenate: 10/35 commits touch its stack files ['xarray/core/concat.py', 'xarray/core/duck_array_ops.py', 'xarray/core/groupby.py', 'xarray/core/variable.py']\n",
+  "stderr_tail": "bisecting 35 commits (555a70e290..f64f14bb4f)\nendpoints: bad vs good +1939.8% (canary-adjusted)\nattribution prior from xarray/core/duck_array_ops.py:286 concatenate: 10/35 commits touch its stack files ['xarray/core/concat.py', 'xarray/core/duck_array_ops.py', 'xarray/core/groupby.py', 'xarray/core/variable.py']\nbatch size per visit: 3 (build 0.0 s, run 0.40 s)\n  visit 1: commit 20 3ead17ea9e +2176.2% vs good; best 4 p=0.12\n  visit 2: commit 12 9a71cc0716 -2.4% vs good; best 13 p=0.25\n  visit 3: commit 14 d535a3bf46 +9.1% vs good; best 20 p=0.50\n  visit 4: commit 19 99229efa60 +15.8% vs good; best 20 p=1.00\n",
+  "found": "3ead17ea9e99283e2511b65b9d864d1c7b10b3c4",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 1.0,
+  "runs": 38,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "attribution prior from xarray/core/duck_array_ops.py:286 concatenate: 10/35 commits touch its stack files ['xarray/core/concat.py', 'xarray/core/duck_array_ops.py', 'xarray/core/groupby.py', 'xarray/core/variable.py']",
+  "prior_flagged": 10,
+  "prior_flags_culprit": true
+}

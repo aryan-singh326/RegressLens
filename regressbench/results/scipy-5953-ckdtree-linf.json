@@ -1,0 +1,4 @@
+{
+  "id": "scipy-5953-ckdtree-linf",
+  "note": "not run: building 2015 SciPy needs Python 3.5 + NumPy 1.10 + gfortran; rglns needs Python >= 3.9"
+}

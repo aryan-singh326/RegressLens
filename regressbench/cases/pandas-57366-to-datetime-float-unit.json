@@ -1,0 +1,35 @@
+{
+  "id": "pandas-57366-to-datetime-float-unit",
+  "project": "pandas",
+  "repo": "https://github.com/pandas-dev/pandas.git",
+  "issue": "https://github.com/pandas-dev/pandas/issues/57366",
+  "summary": "to_datetime(float64 Series, unit='s'): 42-48x slower (asv inference.ToDatetimeFromIntsFloats)",
+  "culprit": {
+    "sha": "d9f70b397a010754ae41e7d201bba05834294559",
+    "pr": 56037,
+    "subject": "BUG: to_datetime with floats and unit not matching Timestamp (#56037)"
+  },
+  "expected_first_parent": "d9f70b397a010754ae41e7d201bba05834294559",
+  "good": "1e1f53c805b1095824bffa8f71b6d97cc81076e5",
+  "bad": "aeed91c027dd30da25f6641a1784f81f2782b6df",
+  "fixed_by": [
+    "https://github.com/pandas-dev/pandas/pull/64438"
+  ],
+  "build": "C extensions (meson-python); every visit rebuilds",
+  "setup": "python -m pip install -e . --no-build-isolation -q",
+  "environment": {
+    "python": "3.11",
+    "pip": [
+      "numpy==1.26.4",
+      "cython==3.0.5",
+      "meson==1.2.1",
+      "meson-python==0.13.1",
+      "versioneer[toml]",
+      "python-dateutil",
+      "pytz",
+      "tzdata",
+      "ninja"
+    ]
+  },
+  "bench": "pandas_57366.py"
+}

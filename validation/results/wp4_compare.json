@@ -1,0 +1,45 @@
+{
+  "null": [
+    {
+      "theta": 0.05,
+      "sigma": 0.02,
+      "cs": 0.0,
+      "naive": 0.0
+    },
+    {
+      "theta": 0.05,
+      "sigma": 0.05,
+      "cs": 0.0,
+      "naive": 0.002
+    },
+    {
+      "theta": 0.0,
+      "sigma": 0.02,
+      "cs": 0.0272,
+      "naive": 0.539
+    },
+    {
+      "theta": 0.0,
+      "sigma": 0.05,
+      "cs": 0.0348,
+      "naive": 0.546
+    }
+  ],
+  "efficiency": {
+    "median_blocks_10pct": 7.0,
+    "p90_blocks_10pct": 12.0,
+    "regression_rate_3pct": 0.0005
+  },
+  "real": {
+    "aa_runs": 200,
+    "aa_false": 0,
+    "fixture_flagged": true,
+    "fixture_flagged_with_hog": true,
+    "hog_output": "rglns compare: HEAD~1 (A) vs HEAD (B)\n  verdict: REGRESSION\n  effect of B vs A: +64.19%, anytime-valid 95% confidence sequence [+51.34%, +78.13%]\n  8 interleaved blocks (32 measured runs), threshold 5%, 21 s\n  canary shift B vs A: compute +13.1%, memory +4.8%; drift-bounded interval [+33.8%, +69.9%]\n\nPer-call-site drill-down (exploratory): baseline 1 session(s) / 16 runs vs current 1 session(s) / 16 runs\n  threshold 5%, alpha 0.05, Benjamini-Hochberg across 3 comparisons, effect = drift-bounded run-level ratio (BCa)\n  EXPLORATORY per-call-site drill-down (single session per side)\n\n  regression         +64.2% [+19.4%, +72.0%]            <wall time>  [process]\n  regression         +1105.2% [+744.5%, +1185.2%]       signals.py:3 smooth  [np.convolve]\n  regression         +78.7% [+18.8%, +103.3%]           signals.py:3 smooth  [np.ones]\n"
+  },
+  "_meta": {
+    "when": "2026-10-11 13:29",
+    "python": "3.14.7",
+    "machine": "Intel(R) Core(TM) Ultra 7 255U (14 threads, Windows)"
+  }
+}

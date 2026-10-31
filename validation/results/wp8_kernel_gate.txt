@@ -1,0 +1,5 @@
+Windows AMD64, NumPy 2.5.3
+  raw diff share of diff_log:     30.2% (plan gate: > 30%)
+  compute share (no allocation):  8.4%
+  decision: do not build a native diff kernel
+  (the raw share passes only because of output allocation, which a native kernel would pay too)

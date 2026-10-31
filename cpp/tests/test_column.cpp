@@ -12,17 +12,10 @@
 
 #include "regresslens/column.hpp"
 
+#include "test_util.hpp"
+
 using regresslens::ColumnBuffer;
 using regresslens::DType;
-
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
 
 static void test_contiguous_f64() {
     std::vector<double> data = {1.0, 2.0, 3.0, 4.0};

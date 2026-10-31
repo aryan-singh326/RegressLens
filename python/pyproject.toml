@@ -1,29 +1,39 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "regresslens"
-version = "0.1.0.dev0"
+version = "0.2.0"
 description = "Performance regression intelligence for recurring scientific Python/NumPy pipelines"
+readme = "README.md"
 requires-python = ">=3.9"
-dependencies = [
-    "numpy>=1.22",
+license = { text = "Apache-2.0" }
+dependencies = ["numpy>=1.22"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Benchmark",
 ]
-license = {text = "Apache-2.0"}
+
+[project.optional-dependencies]
+# Native scalar + AVX2 kernels (binary wheels). Everything works without them.
+accel = ["regresslens-accel>=0.2,<0.3"]
+dev = ["pytest", "hypothesis"]
 
 [project.scripts]
 rglns = "regresslens.cli:main"
 
-[project.optional-dependencies]
-dev = ["pytest"]
+[project.urls]
+Homepage = "https://github.com/aryansingh/RegressLens"
 
-[build-system]
-requires = ["scikit-build-core>=0.8", "pybind11>=2.11"]
-build-backend = "scikit_build_core.build"
+[tool.setuptools.packages.find]
+include = ["regresslens*"]
 
-[tool.scikit-build]
-# CMakeLists.txt lives alongside this pyproject.toml (python/), and
-# deliberately builds ONLY the native extension -- see that file's
-# header comment for why it's separate from cpp/CMakeLists.txt.
-cmake.source-dir = "."
-wheel.packages = ["regresslens"]
+[tool.setuptools.package-data]
+regresslens = ["_boot/sitecustomize.py", "telemetry_schema.json"]
 
-[tool.scikit-build.cmake.define]
-CMAKE_BUILD_TYPE = "Release"
+[tool.pytest.ini_options]
+markers = [
+    "slow: long-running statistical or end-to-end validation (deselect with -m 'not slow')",
+]

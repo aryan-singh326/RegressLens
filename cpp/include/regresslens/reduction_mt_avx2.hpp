@@ -1,57 +1,56 @@
 #pragma once
-#include <algorithm>
 #include <thread>
-#include <vector>
 
 #include "regresslens/reduction_avx2.hpp"
 
-// Must be included from translation units compiled with -mavx2.
+// Include only from translation units compiled with -mavx2 -mfma.
 
 namespace regresslens {
 
-// Multithreaded AVX2 sum reduction: partitions the array into
-// num_threads contiguous chunks, runs the AVX2 reduction kernel on
-// each chunk in its own thread, then combines the partial sums.
-// Uses a fixed thread count per call rather than a persistent thread
-// pool — per the project brief's kernel spec, a persistent pool
-// belongs in the runtime integration layer (Phase 3), not the
-// Phase 1 kernel itself. This keeps the kernel's own interface
-// simple and testable in isolation.
-//
-// Reduction is "embarrassingly parallel" for this purpose: summing
-// disjoint chunks and adding the partial sums together gives the
-// same mathematical result as summing everything sequentially,
-// modulo floating-point reassociation — see the correctness test for
-// how that's handled.
+// Upper bound on worker threads per call. Fixed so the per-thread
+// partial sums live in a stack array (no std::vector in AVX2 code,
+// see avx2_common.hpp).
+constexpr size_t kMaxKernelThreads = 64;
+
+// Multithreaded compensated sum: num_threads contiguous chunks, each
+// reduced by the AVX2 kernel into an (s, c) pair, then merged in chunk
+// order so the result is deterministic for a given thread count.
+// Threads are created per call rather than pooled; the kernel
+// selector only picks this variant at sizes where that overhead is
+// negligible.
 template <typename T>
-T reduce_sum_mt_avx2(const T* data, size_t n, size_t num_threads) {
-    if (n == 0) return T(0);
+static inline SumParts reduce_sum_mt_avx2_parts(const T* data, size_t n,
+                                                size_t num_threads) {
+    if (n == 0) return SumParts{0.0, 0.0};
     if (num_threads == 0) num_threads = 1;
-    num_threads = std::min(num_threads, n);
+    if (num_threads > kMaxKernelThreads) num_threads = kMaxKernelThreads;
+    if (num_threads > n) num_threads = n;
 
-    std::vector<T> partial_sums(num_threads, T(0));
-    std::vector<std::thread> threads;
-    threads.reserve(num_threads);
+    SumParts partial[kMaxKernelThreads];
+    std::thread workers[kMaxKernelThreads];
 
-    size_t chunk = n / num_threads;
-    size_t remainder = n % num_threads;
-
+    const size_t chunk = n / num_threads;
+    const size_t remainder = n % num_threads;
     size_t offset = 0;
     for (size_t t = 0; t < num_threads; ++t) {
-        // Distribute the remainder across the first `remainder`
-        // threads so chunk sizes differ by at most 1 element,
-        // rather than dumping all the leftover into the last thread.
-        size_t this_chunk = chunk + (t < remainder ? 1 : 0);
-        threads.emplace_back([&, offset, this_chunk, t]() {
-            partial_sums[t] = reduce_sum_avx2(data + offset, this_chunk);
+        // Spread the remainder over the first chunks so sizes differ
+        // by at most one element.
+        const size_t len = chunk + (t < remainder ? 1 : 0);
+        workers[t] = std::thread([data, offset, len, t, &partial]() {
+            partial[t] = reduce_sum_avx2_parts(data + offset, len);
         });
-        offset += this_chunk;
+        offset += len;
     }
-    for (auto& th : threads) th.join();
+    for (size_t t = 0; t < num_threads; ++t) workers[t].join();
 
-    T total = T(0);
-    for (T p : partial_sums) total += p;
-    return total;
+    SumParts acc{0.0, 0.0};
+    for (size_t t = 0; t < num_threads; ++t) avx2_detail::merge_parts(acc, partial[t]);
+    return acc;
+}
+
+template <typename T>
+static inline double reduce_sum_mt_avx2(const T* data, size_t n, size_t num_threads) {
+    return avx2_detail::finish(reduce_sum_mt_avx2_parts<T>(data, n, num_threads));
 }
 
 }  // namespace regresslens

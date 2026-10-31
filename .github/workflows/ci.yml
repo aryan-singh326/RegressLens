@@ -1,0 +1,158 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"   # nightly: slow statistical and end-to-end tests
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: py${{ matrix.python }} ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          - {os: ubuntu-24.04-arm, python: "3.12"}   # aarch64: scalar kernels only
+          - {os: macos-14, python: "3.9"}            # arm64
+          - {os: macos-14, python: "3.13"}
+          - {os: macos-13, python: "3.12"}           # x86_64
+          - {os: windows-latest, python: "3.9"}
+          - {os: windows-latest, python: "3.13"}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install regresslens-accel (from source) and regresslens
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./cpp
+          python -m pip install "./python[dev]"
+      - name: Tests (automatic kernel dispatch)
+        working-directory: python
+        run: python -m pytest tests -q -m "not slow"
+      - name: Tests (scalar kernels only)
+        working-directory: python
+        env:
+          RGLNS_FORCE_KERNEL: scalar
+        run: python -m pytest tests -q -m "not slow"
+      - name: Tests (no native module at all)
+        working-directory: python
+        env:
+          RGLNS_DISABLE_ACCEL: "1"
+        run: python -m pytest tests -q -m "not slow"
+
+  min-numpy:
+    # NumPy < 1.25 implements np.sum, np.concatenate, ... as Python code in
+    # the pseudo-file "<__array_function__ internals>", which observation
+    # must treat as NumPy, not as user code.
+    name: py${{ matrix.python }} numpy ${{ matrix.numpy }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {python: "3.9", numpy: "1.22.4"}   # the declared minimum
+          - {python: "3.10", numpy: "1.24.4"}  # last release before the C dispatcher
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: |
+          python -m pip install ./cpp "./python[dev]"
+          python -m pip install "numpy==${{ matrix.numpy }}"
+      - working-directory: python
+        run: python -m pytest tests -q -m "not slow"
+
+  slow:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ./cpp "./python[dev]"
+      - name: Slow tests
+        working-directory: python
+        run: python -m pytest tests -q -m slow
+      - name: rglns verify (accuracy policy, 7000 cases)
+        run: rglns verify --cases 7000 --seed ${{ github.run_number }}
+
+  cpp:
+    name: C++ ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pybind11
+      - run: cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release --parallel
+      - run: ctest --test-dir build -C Release --output-on-failure
+
+  isa-isolation:
+    # No VEX instructions outside the AVX2 translation unit, and no COMDAT
+    # shared between it and baseline code (tools/check_isa_isolation.py).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pybind11
+      - run: cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
+      - run: python tools/check_isa_isolation.py build
+
+  no-avx:
+    # The plan's portability test: import and smoke tests on a CPU without
+    # AVX (qemu -cpu Nehalem). 0.1.0.dev0 died with SIGILL at import here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - run: python -m pip install ./cpp "./python[dev]" pybind11
+      - name: Scalar C++ tests under Nehalem
+        run: |
+          cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
+          for t in test_reduction_scalar test_rolling_scalar test_rolling_var test_nonfinite \
+                   test_dispatch test_filter_scalar test_projection_scalar; do
+            qemu-x86_64 -cpu Nehalem build/tests/$t
+          done
+          set +e; qemu-x86_64 -cpu Nehalem build/tests/test_reduction_avx2; test $? -eq 77
+      - name: Import and smoke tests under Nehalem
+        run: |
+          PY=$(python -c "import sys; print(sys.executable)")
+          qemu-x86_64 -cpu Nehalem $PY -c "
+          import numpy as np, regresslens as rl
+          info = rl.accel_info(); assert info['native'] and info['isa'] == 'scalar', info
+          x = np.arange(1, 41, dtype=float); x[5] = np.nan
+          assert int(np.isnan(rl.array(x).rolling_sum(4).to_numpy()).sum()) == 4
+          assert rl.array(np.ones(1001)).sum() == 1001.0
+          print('Nehalem smoke: ok')"
+          cd python && qemu-x86_64 -cpu Nehalem $PY -m pytest tests/test_array.py tests/test_accuracy.py -q
+          RGLNS_FORCE_KERNEL=avx2 qemu-x86_64 -cpu Nehalem $PY -c "import regresslens_accel._native" \
+            && exit 1 || echo "forcing avx2 on Nehalem fails cleanly: ok"

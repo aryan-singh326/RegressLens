@@ -15,14 +15,7 @@
 #include "regresslens/rolling_avx2.hpp"
 #include "regresslens/rolling_scalar.hpp"
 
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
+#include "test_util.hpp"
 
 // Ground truth: sums each window from scratch in double precision.
 // This is what AVX2 gets held to a tight tolerance against. Scalar
@@ -102,6 +95,7 @@ static void test_edge_cases() {
 }
 
 int main() {
+    SKIP_UNLESS_AVX2();
     test_edge_cases();
 
     for (size_t n : {size_t(20), size_t(1000), size_t(100'000), size_t(1'000'003)}) {

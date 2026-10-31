@@ -1,0 +1,29 @@
+{
+  "id": "xarray-11305-to-dataframe-multiindex",
+  "project": "xarray",
+  "repo": "https://github.com/pydata/xarray.git",
+  "issue": "https://github.com/pydata/xarray/issues/11305",
+  "summary": "DataArray.to_dataframe (Coordinates.to_index) ~40x slower: index codes became Python lists",
+  "culprit": {
+    "sha": "a13a2556a29b3c5ba342a402b2598bab42939b46",
+    "pr": 10694,
+    "subject": "Upgrade mypy to 1.17.1 and fix all type errors (#10694)"
+  },
+  "expected_first_parent": "a13a2556a29b3c5ba342a402b2598bab42939b46",
+  "good": "d4fcd2b440c5b4137ad3d73937c3a5a0aa2b3170",
+  "bad": "f6da5145f1fe77d76473fc2a983f36b843d471a1",
+  "fixed_by": [
+    "https://github.com/pydata/xarray/pull/11306"
+  ],
+  "build": "none (pure Python)",
+  "setup": null,
+  "environment": {
+    "python": "3.12",
+    "pip": [
+      "numpy==2.3.2",
+      "pandas==2.3.2",
+      "packaging"
+    ]
+  },
+  "bench": "xarray_11305.py"
+}

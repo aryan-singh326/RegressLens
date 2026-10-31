@@ -1,0 +1,18 @@
+{
+  "id": "xarray-11305-to-dataframe-multiindex",
+  "elapsed_s": 52.59459376335144,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: a13a2556a2 Upgrade mypy to 1.17.1 and fix all type errors (#10694) (p = 1.000, effect +239.7%)\n  95% credible set (1 commit): a13a2556a2\n  38 runs over 35 commits in 52 s; attribution prior from xarray/core/variable.py:336 _as_array_or_item: 5/35 commits touch its stack files ['/rb/bench/xarray_11305.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py', 'xarray/core/variable.py']\n",
+  "stderr_tail": "bisecting 35 commits (d4fcd2b440..f6da5145f1)\nendpoints: bad vs good +239.3% (canary-adjusted)\nattribution prior from xarray/core/variable.py:336 _as_array_or_item: 5/35 commits touch its stack files ['/rb/bench/xarray_11305.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py', 'xarray/core/variable.py']\nbatch size per visit: 3 (build 0.0 s, run 0.79 s)\n  visit 1: commit 19 de6d87dc80 +1.6% vs good; best 20 p=0.18\n  visit 2: commit 28 de953a8e12 +249.6% vs good; best 20 p=0.38\n  visit 3: commit 21 70c3ebf496 +243.1% vs good; best 20 p=0.83\n  visit 4: commit 20 a13a2556a2 +233.3% vs good; best 20 p=1.00\n",
+  "found": "a13a2556a29b3c5ba342a402b2598bab42939b46",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 0.9999999999999285,
+  "runs": 38,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "attribution prior from xarray/core/variable.py:336 _as_array_or_item: 5/35 commits touch its stack files ['/rb/bench/xarray_11305.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py', 'xarray/core/variable.py']",
+  "prior_flagged": 5,
+  "prior_flags_culprit": true
+}

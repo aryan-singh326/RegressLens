@@ -1,0 +1,18 @@
+{
+  "id": "pandas-38038-groupby-rolling",
+  "elapsed_s": 683.8590466976166,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: bad52a9d1e PERF: Use Indexers to implement groupby rolling (#34052) (p = 1.000, effect +285.9%)\n  95% credible set (1 commit): bad52a9d1e\n  126 runs over 35 commits in 682 s; attribution prior from pandas/core/dtypes/cast.py:1182 maybe_castable: 3/35 commits touch its stack files ['/rb/bench/pandas_38038.py', 'pandas/core/construction.py', 'pandas/core/dtypes/cast.py', 'pandas/core/frame.py', 'pandas/core/internals/construction.py']\n",
+  "stderr_tail": "bisecting 35 commits (2391aa478b..8a4a4285fe)\nendpoints: bad vs good +300.1% (canary-adjusted)\nattribution prior from pandas/core/dtypes/cast.py:1182 maybe_castable: 3/35 commits touch its stack files ['/rb/bench/pandas_38038.py', 'pandas/core/construction.py', 'pandas/core/dtypes/cast.py', 'pandas/core/frame.py', 'pandas/core/internals/construction.py']\nbatch size per visit: 20 (build 52.8 s, run 0.75 s)\n  visit 1: commit 11 cb35d8a938 -0.4% vs good; best 12 p=0.04\n  visit 2: commit 23 014d8eabf0 +266.2% vs good; best 12 p=0.08\n  visit 3: commit 17 a087f3e585 -1.0% vs good; best 18 p=0.17\n  visit 4: commit 20 bad52a9d1e +297.8% vs good; best 18 p=0.33\n  visit 5: commit 19 a248f7243a +1.0% vs good; best 20 p=1.00\n",
+  "found": "bad52a9d1ef9fe6b27ef44fae99f483d07ad16f6",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 1.0,
+  "runs": 126,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "attribution prior from pandas/core/dtypes/cast.py:1182 maybe_castable: 3/35 commits touch its stack files ['/rb/bench/pandas_38038.py', 'pandas/core/construction.py', 'pandas/core/dtypes/cast.py', 'pandas/core/frame.py', 'pandas/core/internals/construction.py']",
+  "prior_flagged": 3,
+  "prior_flags_culprit": false
+}

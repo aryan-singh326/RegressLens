@@ -1,0 +1,102 @@
+# End-to-end test of the published composite action (action.yml) on GitHub's
+# own runners: an example repository with one regressing PR and one clean PR.
+# Comments go to a local fake of the GitHub API (tools/fake_github.py), so the
+# test never writes to a real repository. Asserts the comment content, that a
+# second run edits the same comment, and the check status of each run.
+name: action-e2e
+
+on:
+  pull_request:
+    paths: ["action.yml", "python/regresslens/commands/**", ".github/workflows/action-e2e.yml"]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create the example repository
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/example" && cd "$RUNNER_TEMP/example"
+          git init -q -b main && git config user.email ci@example.com && git config user.name ci
+          printf 'import numpy as np\nfrom signals import smooth\nx = np.random.default_rng(0).uniform(-1, 1, 300_000)\nfor _ in range(12):\n    smooth(x)\n' > bench.py
+          printf "import numpy as np\ndef smooth(x):\n    return np.convolve(x, np.ones(5) / 5, mode='valid')\n" > signals.py
+          git add -A && git commit -qm base
+          git checkout -qb slow-pr && sed -i 's/ones(5) \/ 5/ones(60) \/ 60/' signals.py && git commit -qam slower
+          git checkout -q main && git checkout -qb docs-pr && echo docs > README.md && git add -A && git commit -qm docs
+          echo "EXAMPLE=$RUNNER_TEMP/example" >> "$GITHUB_ENV"
+
+      - name: Start the fake GitHub API
+        run: |
+          python tools/fake_github.py --port 8765 --dump "$RUNNER_TEMP/comments.json" &
+          sleep 1
+
+      - name: Checkout the regressing PR
+        run: git -C "$EXAMPLE" checkout -q slow-pr
+      - name: Run the action (regressing PR)
+        id: slow
+        continue-on-error: true
+        uses: ./
+        with:
+          command: python bench.py
+          working-directory: ${{ env.EXAMPLE }}
+          base-ref: main
+          regresslens-spec: ./python
+          pr-number: "1"
+          github-token: test-token
+          api-url: http://127.0.0.1:8765
+      - name: Run the action again (second push must edit, not duplicate)
+        id: slow2
+        continue-on-error: true
+        uses: ./
+        with:
+          command: python bench.py
+          working-directory: ${{ env.EXAMPLE }}
+          base-ref: main
+          regresslens-spec: ./python
+          pr-number: "1"
+          github-token: test-token
+          api-url: http://127.0.0.1:8765
+
+      - name: Checkout the clean PR
+        run: git -C "$EXAMPLE" checkout -q docs-pr
+      - name: Run the action (clean PR)
+        id: clean
+        continue-on-error: true
+        uses: ./
+        with:
+          command: python bench.py
+          working-directory: ${{ env.EXAMPLE }}
+          base-ref: main
+          regresslens-spec: ./python
+          pr-number: "2"
+          github-token: test-token
+          api-url: http://127.0.0.1:8765
+
+      - name: Assert check status and comments
+        env:
+          SLOW: ${{ steps.slow.outcome }}
+          SLOW_VERDICT: ${{ steps.slow.outputs.verdict }}
+          CLEAN: ${{ steps.clean.outcome }}
+          CLEAN_VERDICT: ${{ steps.clean.outputs.verdict }}
+        run: |
+          python - <<'EOF'
+          import json, os
+          assert os.environ["SLOW"] == "failure", os.environ["SLOW"]
+          assert os.environ["SLOW_VERDICT"] == "regression", os.environ["SLOW_VERDICT"]
+          assert os.environ["CLEAN"] == "success", os.environ["CLEAN"]
+          assert os.environ["CLEAN_VERDICT"] in ("equivalent", "inconclusive"), os.environ["CLEAN_VERDICT"]
+          comments = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "comments.json")))
+          pr1 = [c["body"] for c in comments.values() if c["pr"] == 1]
+          pr2 = [c["body"] for c in comments.values() if c["pr"] == 2]
+          assert len(pr1) == 1 and len(pr2) == 1, comments
+          assert pr1[0].startswith("<!-- rglns-compare -->") and "**regression**" in pr1[0]
+          assert "signals.py" in pr1[0]
+          assert "**regression**" not in pr2[0]
+          print("action e2e: ok")
+          EOF

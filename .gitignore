@@ -2,10 +2,22 @@ build/
 *.o
 *.a
 *.so
+*.pyd
 
 # Python
 __pycache__/
 *.pyc
-*.so
 .pytest_cache/
+.hypothesis/
 *.egg-info/
+dist/
+wheelhouse/
+
+# Local runs
+regressbench/.work/
+regressbench/results/*.bisect
+regressbench/results/*.log
+*.db
+*.db-wal
+*.db-shm
+!python/tests/fixtures/v1_traces.db

@@ -1,0 +1,122 @@
+name: RegressLens compare
+description: >-
+  Interleaved, anytime-valid performance comparison of a pull request against
+  its base branch. Posts one PR comment (updated on every push) and fails the
+  check only when the verdict is "regression".
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  command:
+    description: Benchmark command, run in each checkout (e.g. "python bench.py").
+    required: true
+  setup:
+    description: Command run once in each checkout before measuring (e.g. "pip install -e .").
+    default: ""
+  theta:
+    description: Practical threshold as a fraction (0.05 = 5%).
+    default: "0.05"
+  alpha:
+    description: Error level of the anytime-valid confidence sequence.
+    default: "0.05"
+  min-blocks:
+    description: Minimum ABBA/BAAB blocks before stopping.
+    default: "4"
+  max-blocks:
+    description: Maximum blocks (each block is 4 runs).
+    default: "60"
+  base-ref:
+    description: Branch or revision to compare against.
+    default: ${{ github.base_ref }}
+  working-directory:
+    description: Directory (inside the repository) to run in.
+    default: "."
+  regresslens-spec:
+    description: pip requirement used to install RegressLens.
+    default: "regresslens[accel]"
+  comment:
+    description: Post or update the PR comment ("true"/"false").
+    default: "true"
+  pr-number:
+    description: Pull request number for the comment.
+    default: ${{ github.event.pull_request.number }}
+  github-token:
+    description: Token for the PR comment.
+    default: ${{ github.token }}
+  api-url:
+    description: GitHub REST API URL.
+    default: ${{ github.api_url }}
+
+outputs:
+  verdict:
+    description: regression | equivalent | improvement | inconclusive | error
+    value: ${{ steps.compare.outputs.verdict }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install RegressLens
+      shell: bash
+      env:
+        SPEC: ${{ inputs.regresslens-spec }}
+      run: python -m pip install --disable-pip-version-check "$SPEC"
+
+    - name: Compare base and head (interleaved)
+      id: compare
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+        RGLNS_CMD: ${{ inputs.command }}
+        RGLNS_SETUP: ${{ inputs.setup }}
+        THETA: ${{ inputs.theta }}
+        ALPHA: ${{ inputs.alpha }}
+        MIN_BLOCKS: ${{ inputs.min-blocks }}
+        MAX_BLOCKS: ${{ inputs.max-blocks }}
+        RGLNS_TELEMETRY: "0"
+      run: |
+        set +e
+        git fetch --no-tags --quiet origin "$BASE_REF" 2>/dev/null
+        base="$BASE_REF"
+        if git rev-parse --verify --quiet "origin/$BASE_REF" >/dev/null; then base="origin/$BASE_REF"; fi
+        args=(compare "$base" HEAD --cmd "$RGLNS_CMD" --theta "$THETA" --alpha "$ALPHA"
+              --min-blocks "$MIN_BLOCKS" --max-blocks "$MAX_BLOCKS"
+              --markdown "$RUNNER_TEMP/rglns.md" --json "$RUNNER_TEMP/rglns.json")
+        if [ -n "$RGLNS_SETUP" ]; then args+=(--setup "$RGLNS_SETUP"); fi
+        rglns "${args[@]}"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$RUNNER_TEMP/rglns.json" ]; then
+          python -c "import json,sys; print('verdict=' + json.load(open(sys.argv[1]))['verdict'])" \
+            "$RUNNER_TEMP/rglns.json" >> "$GITHUB_OUTPUT"
+        else
+          echo "verdict=error" >> "$GITHUB_OUTPUT"
+          printf '<!-- rglns-compare -->\n### RegressLens: could not compare (exit %s)\n\nSee the workflow log.\n' \
+            "$code" > "$RUNNER_TEMP/rglns.md"
+        fi
+        exit 0
+
+    - name: Post or update the PR comment
+      if: inputs.comment == 'true' && inputs.pr-number != ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ inputs.pr-number }}
+        API: ${{ inputs.api-url }}
+      run: rglns ci comment --markdown "$RUNNER_TEMP/rglns.md" --pr "$PR" --api "$API"
+
+    - name: Check status
+      shell: bash
+      env:
+        CODE: ${{ steps.compare.outputs.exit-code }}
+        VERDICT: ${{ steps.compare.outputs.verdict }}
+      run: |
+        cat "$RUNNER_TEMP/rglns.md" >> "$GITHUB_STEP_SUMMARY"
+        if [ "$CODE" = "1" ]; then
+          echo "::error::RegressLens: performance regression"
+          exit 1
+        elif [ "$CODE" != "0" ]; then
+          echo "::warning::RegressLens could not complete the comparison (exit $CODE); not failing the check"
+        fi
+        echo "RegressLens verdict: $VERDICT"

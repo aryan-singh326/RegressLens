@@ -1,0 +1,318 @@
+{
+  "grid": [
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9645,
+      "old_regression": 0.0,
+      "old_coverage": 0.926,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.0,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.955,
+      "old_regression": 0.0,
+      "old_coverage": 0.9245,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.0,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9515,
+      "old_regression": 0.0,
+      "old_coverage": 0.9305,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.0,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.001,
+      "new_coverage": 0.9645,
+      "old_regression": 0.0,
+      "old_coverage": 0.9265,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.03,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9575,
+      "old_regression": 0.0,
+      "old_coverage": 0.9245,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.03,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.957,
+      "old_regression": 0.0,
+      "old_coverage": 0.9235,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.03,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.9445,
+      "new_coverage": 0.9585,
+      "old_regression": 0.9915,
+      "old_coverage": 0.936,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.1,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.9975,
+      "new_coverage": 0.953,
+      "old_regression": 1.0,
+      "old_coverage": 0.925,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.1,
+      "runs": 20
+    },
+    {
+      "new_regression": 1.0,
+      "new_coverage": 0.9495,
+      "old_regression": 1.0,
+      "old_coverage": 0.928,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.01,
+      "effect": 0.1,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.96,
+      "old_regression": 0.0,
+      "old_coverage": 0.758,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.0,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9485,
+      "old_regression": 0.0,
+      "old_coverage": 0.7665,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.0,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.954,
+      "old_regression": 0.0,
+      "old_coverage": 0.763,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.0,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.0035,
+      "new_coverage": 0.959,
+      "old_regression": 0.014,
+      "old_coverage": 0.782,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.03,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.0005,
+      "new_coverage": 0.955,
+      "old_regression": 0.004,
+      "old_coverage": 0.7805,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.03,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9555,
+      "old_regression": 0.0005,
+      "old_coverage": 0.7875,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.03,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.7705,
+      "new_coverage": 0.96,
+      "old_regression": 0.9335,
+      "old_coverage": 0.7875,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.1,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.959,
+      "new_coverage": 0.9435,
+      "old_regression": 0.9985,
+      "old_coverage": 0.772,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.1,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.9995,
+      "new_coverage": 0.96,
+      "old_regression": 1.0,
+      "old_coverage": 0.792,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.03,
+      "effect": 0.1,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.002,
+      "new_coverage": 0.957,
+      "old_regression": 0.0255,
+      "old_coverage": 0.5215,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.0,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9505,
+      "old_regression": 0.008,
+      "old_coverage": 0.482,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.0,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.0,
+      "new_coverage": 0.9495,
+      "old_regression": 0.0005,
+      "old_coverage": 0.482,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.0,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.02,
+      "new_coverage": 0.963,
+      "old_regression": 0.13,
+      "old_coverage": 0.4865,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.03,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.009,
+      "new_coverage": 0.9545,
+      "old_regression": 0.084,
+      "old_coverage": 0.5005,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.03,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.005,
+      "new_coverage": 0.9445,
+      "old_regression": 0.0435,
+      "old_coverage": 0.501,
+      "is_null": true,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.03,
+      "runs": 40
+    },
+    {
+      "new_regression": 0.347,
+      "new_coverage": 0.957,
+      "old_regression": 0.723,
+      "old_coverage": 0.4845,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.1,
+      "runs": 10
+    },
+    {
+      "new_regression": 0.4965,
+      "new_coverage": 0.9525,
+      "old_regression": 0.8755,
+      "old_coverage": 0.4975,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.1,
+      "runs": 20
+    },
+    {
+      "new_regression": 0.757,
+      "new_coverage": 0.9475,
+      "old_regression": 0.965,
+      "old_coverage": 0.476,
+      "is_null": false,
+      "theta_log": 0.048790164169432,
+      "sigma": 0.08,
+      "effect": 0.1,
+      "runs": 40
+    }
+  ],
+  "canary_sim": {
+    "environment_drift": 1.0
+  },
+  "canary_sim_v01_regression": 1.0,
+  "bh": {
+    "fdr": 0.0,
+    "power_bh": 0.98,
+    "power_bonferroni": 0.8970000000000001,
+    "B": 10000
+  },
+  "size_false_regression": 0.0,
+  "trials": 2000,
+  "_meta": {
+    "when": "2026-10-10 17:48",
+    "python": "3.14.7",
+    "machine": "Intel(R) Core(TM) Ultra 7 255U (14 threads, Windows)"
+  }
+}
