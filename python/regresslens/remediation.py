@@ -27,7 +27,7 @@ import time
 _CACHED_COPY_RATE_BYTES_PER_NS = None
 
 
-def calibrate_copy_rate(sample_size=10_000_000, dtype=np.float64):
+def calibrate_copy_rate(sample_size=4_000_000, dtype=np.float64):
     """Measures np.ascontiguousarray()'s throughput on THIS machine,
     once, and caches it. This is the 'calibrated copy rate' the
     project brief specifies — measured on the actual hardware being

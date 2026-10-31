@@ -6,17 +6,10 @@
 
 #include "regresslens/rolling_scalar.hpp"
 
+#include "test_util.hpp"
+
 using regresslens::rolling_mean_scalar;
 using regresslens::rolling_sum_scalar;
-
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
 
 // Deliberately O(n*window) and deliberately NOT the incremental
 // sliding-window technique — this is the ground truth the real

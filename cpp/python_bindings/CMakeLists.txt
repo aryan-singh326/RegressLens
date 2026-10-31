@@ -1,12 +1,18 @@
-find_package(pybind11 CONFIG REQUIRED)
+find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(pybind11 CONFIG QUIET)
+if(NOT pybind11_FOUND)
+  # Development builds outside pip: ask the active interpreter where
+  # its pybind11 CMake config lives.
+  execute_process(
+      COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
+      OUTPUT_VARIABLE _rl_pybind11_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  find_package(pybind11 CONFIG REQUIRED HINTS "${_rl_pybind11_dir}")
+endif()
 
-pybind11_add_module(_regresslens_native bindings.cpp)
-target_link_libraries(_regresslens_native PRIVATE regresslens_core Threads::Threads)
-target_compile_options(_regresslens_native PRIVATE -mavx2 -mfma)
+# No architecture flags: this module must import on any CPU.
+pybind11_add_module(_native bindings.cpp monitor.cpp)
+target_link_libraries(_native PRIVATE regresslens_kernels)
 
-# Drop the built extension module directly into the Python package
-# directory so `import regresslens` finds it without a separate
-# install step during development.
-set_target_properties(_regresslens_native PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/../python/regresslens
-)
+# The wheel installs the module next to regresslens_accel/__init__.py.
+install(TARGETS _native LIBRARY DESTINATION regresslens_accel)

@@ -1,0 +1,18 @@
+{
+  "id": "xarray-10683-interp-vectorized",
+  "elapsed_s": 56.63049077987671,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: 29fe679a9f Rewrite interp to use `apply_ufunc` (#9881) (p = 1.000, effect +293.5%)\n  95% credible set (1 commit): 29fe679a9f\n  38 runs over 35 commits in 55 s; attribution prior from xarray/core/common.py:2055 is_np_datetime_like: 3/35 commits touch its stack files ['/rb/bench/xarray_10683.py', 'xarray/core/common.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py']\n",
+  "stderr_tail": "bisecting 35 commits (99ee8c6ca5..2c8b6e6942)\nendpoints: bad vs good +317.6% (canary-adjusted)\nattribution prior from xarray/core/common.py:2055 is_np_datetime_like: 3/35 commits touch its stack files ['/rb/bench/xarray_10683.py', 'xarray/core/common.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py']\nbatch size per visit: 3 (build 0.0 s, run 0.73 s)\n  visit 1: commit 15 8afed74aac +5.0% vs good; best 20 p=0.21\n  visit 2: commit 23 33bf5e8145 +259.5% vs good; best 20 p=0.42\n  visit 3: commit 19 a90fff9905 +0.9% vs good; best 20 p=0.62\n  visit 4: commit 20 29fe679a9f +274.3% vs good; best 20 p=1.00\n",
+  "found": "29fe679a9fc4611af44e4889b992639dbf40cc91",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 0.9999999999997402,
+  "runs": 38,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "attribution prior from xarray/core/common.py:2055 is_np_datetime_like: 3/35 commits touch its stack files ['/rb/bench/xarray_10683.py', 'xarray/core/common.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py']",
+  "prior_flagged": 3,
+  "prior_flags_culprit": true
+}

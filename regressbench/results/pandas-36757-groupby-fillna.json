@@ -1,0 +1,18 @@
+{
+  "id": "pandas-36757-groupby-fillna",
+  "elapsed_s": 518.6417324542999,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: be6a3bc463 BUG: groupby apply raises ValueError when groupby axis has duplicates and applied identity function (#30679) (p = 1.000, effect +800.4%)\n  95% credible set (1 commit): be6a3bc463\n  106 runs over 35 commits in 516 s; attribution prior from pandas/core/dtypes/missing.py:497 array_equivalent: 7/35 commits touch its stack files ['pandas/core/dtypes/missing.py', 'pandas/core/generic.py', 'pandas/core/groupby/generic.py', 'pandas/core/groupby/groupby.py', 'pandas/core/indexes/base.py', 'pandas/core/series.py']\n",
+  "stderr_tail": "bisecting 35 commits (55cfabb630..469b4b71fd)\nendpoints: bad vs good +822.2% (canary-adjusted)\nattribution prior from pandas/core/dtypes/missing.py:497 array_equivalent: 7/35 commits touch its stack files ['pandas/core/dtypes/missing.py', 'pandas/core/generic.py', 'pandas/core/groupby/generic.py', 'pandas/core/groupby/groupby.py', 'pandas/core/indexes/base.py', 'pandas/core/series.py']\nbatch size per visit: 20 (build 16.1 s, run 0.63 s)\n  visit 1: commit 19 6a2f95b320 -1.6% vs good; best 20 p=0.16\n  visit 2: commit 25 998e74278f +801.9% vs good; best 20 p=0.36\n  visit 3: commit 22 f8e905e97e +788.2% vs good; best 20 p=0.71\n  visit 4: commit 20 be6a3bc463 +786.0% vs good; best 20 p=1.00\n",
+  "found": "be6a3bc46382074b5e233ac8d78b7a96a0c24bf5",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 1.0,
+  "runs": 106,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "attribution prior from pandas/core/dtypes/missing.py:497 array_equivalent: 7/35 commits touch its stack files ['pandas/core/dtypes/missing.py', 'pandas/core/generic.py', 'pandas/core/groupby/generic.py', 'pandas/core/groupby/groupby.py', 'pandas/core/indexes/base.py', 'pandas/core/series.py']",
+  "prior_flagged": 7,
+  "prior_flags_culprit": true
+}

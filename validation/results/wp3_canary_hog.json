@@ -1,0 +1,14 @@
+{
+  "trials": 20,
+  "hogs": 4,
+  "verdicts": {
+    "environment_drift": 1.0
+  },
+  "v01_regression_rate": 1.0,
+  "median_raw_slowdown": 0.5326942217216554,
+  "_meta": {
+    "when": "2026-10-11 10:44",
+    "python": "3.14.7",
+    "machine": "Intel(R) Core(TM) Ultra 7 255U (14 threads, Windows)"
+  }
+}

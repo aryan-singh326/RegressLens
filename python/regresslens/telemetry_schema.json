@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aryan-singh326/RegressLens/blob/main/python/regresslens/telemetry_schema.json",
+  "title": "RegressLens telemetry event (schema_version 1)",
+  "description": "The complete content of one opt-in telemetry event. No other fields are ever sent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "install_id", "command", "verdict_counts", "python", "numpy", "platform", "regresslens"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "install_id": {"type": ["string", "null"], "pattern": "^[0-9a-f]{32}$", "description": "Random UUID generated when telemetry is enabled; not derived from any machine or user data."},
+    "command": {"enum": ["run", "baseline", "check", "profile", "compare", "bisect", "watch", "verify", "sessions", "ci", "other"]},
+    "verdict_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}, "description": "Number of results per verdict class, e.g. {\"regression\": 1, \"equivalent\": 12}."},
+    "python": {"type": "string", "description": "Python version, e.g. 3.12.4"},
+    "numpy": {"type": ["string", "null"], "description": "NumPy version, if loaded"},
+    "platform": {"type": "string", "description": "OS and machine, e.g. Linux-x86_64"},
+    "regresslens": {"type": "string"}
+  }
+}

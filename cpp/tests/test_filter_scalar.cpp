@@ -5,16 +5,9 @@
 
 #include "regresslens/filter_scalar.hpp"
 
-using regresslens::filter_gt_scalar;
+#include "test_util.hpp"
 
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
+using regresslens::filter_gt_scalar;
 
 static void test_known_values() {
     double in[6] = {1.0, 5.0, 2.0, 8.0, -3.0, 4.0};

@@ -1,0 +1,35 @@
+{
+  "id": "numpy-26807-log-complex64",
+  "project": "numpy",
+  "repo": "https://github.com/numpy/numpy.git",
+  "issue": "https://github.com/numpy/numpy/issues/26807",
+  "summary": "np.log on complex64: 39.6 ms -> 65.2 ms (Linux/GCC only; not on macOS arm64)",
+  "culprit": {
+    "sha": "1cd92a1483227d26b5d770f1916549caca51f50b",
+    "pr": 24085,
+    "subject": "Merge pull request #24085 from lysnikolaou/real-imag-remove"
+  },
+  "expected_first_parent": "1cd92a1483227d26b5d770f1916549caca51f50b",
+  "good": "d50fc570a9e15ea4d8ec35add245d5d791fa4596",
+  "bad": "4359c877d810e39be0ddaae53a5a17b91ede603e",
+  "fixed_by": [],
+  "build": "C extensions (meson); every visit rebuilds; regression is Linux/GCC-specific",
+  "setup": "git submodule update --init -q && python -m pip install . --no-build-isolation -q",
+  "environment": {
+    "python": "3.11",
+    "platform": "linux",
+    "pip": [
+      "numpy==1.26.4",
+      "cython==3.0.0",
+      "meson-python",
+      "ninja",
+      "spin"
+    ],
+    "note": "numpy==1.26.4 is only for the rglns CLI itself; every visit's `pip install .` replaces it with the commit under test. OpenBLAS: later commits in the range refuse to build without a BLAS library (allow-noblas defaults to false), and earlier ones lack that option, so both build against OpenBLAS",
+    "apt": [
+      "libopenblas-dev",
+      "pkg-config"
+    ]
+  },
+  "bench": "numpy_26807.py"
+}

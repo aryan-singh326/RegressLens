@@ -5,16 +5,9 @@
 
 #include "regresslens/projection_scalar.hpp"
 
-using regresslens::project_affine_scalar;
+#include "test_util.hpp"
 
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
+using regresslens::project_affine_scalar;
 
 static void test_known_values() {
     double in[4] = {1.0, 2.0, 3.0, 4.0};

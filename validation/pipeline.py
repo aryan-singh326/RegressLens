@@ -61,9 +61,9 @@ def run_numpy_baseline(prices, window=20, filter_threshold=0.5):
 def run_regresslens(prices, window=20, filter_threshold=0.5, timing=None):
     """RegressLens-accelerated version. `timing`, if given a dict, is
     populated with wall-clock durations for each stage — including
-    the UNACCELERATED stages (log, diff, std), which are NOT captured
-    by regresslens.trace since they never call into a regresslens.array
-    method at all. Without this manual instrumentation, the
+    the UNACCELERATED stages (log, diff, std), which rl.array never sees
+    because they never call into a regresslens.array method at all
+    (`rglns run` would observe them as plain NumPy calls). Without this manual instrumentation, the
     'intercepted fraction vs fallback fraction' report would only see
     the accelerated portion and silently miss the rest of the
     pipeline's real cost.

@@ -7,14 +7,7 @@
 #include "regresslens/projection_avx2.hpp"
 #include "regresslens/projection_scalar.hpp"
 
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
+#include "test_util.hpp"
 
 template <typename T>
 static void check_matches_scalar(const char* label, size_t n, T rel_tol) {
@@ -63,6 +56,7 @@ static void test_in_place_avx2() {
 }
 
 int main() {
+    SKIP_UNLESS_AVX2();
     // Sizes around the unroll block boundaries (16 for f64, 32 for
     // f32) plus edge cases, same discipline as the reduction AVX2
     // test.

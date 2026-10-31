@@ -1,0 +1,101 @@
+# Builds and publishes both distributions:
+#   regresslens        pure Python, py3-none-any (python/)
+#   regresslens-accel  native kernels, one wheel per platform/CPython (cpp/)
+# The full test suite runs inside every accel wheel build (cibuildwheel,
+# see cpp/pyproject.toml), once with automatic dispatch and once with
+# RGLNS_FORCE_KERNEL=scalar. Fresh-environment install checks then run
+# `rglns --help` and `rglns run` from the built wheels on every platform.
+# Publishing uses PyPI Trusted Publishing (OIDC): no API tokens are stored.
+name: wheels
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["cpp/**", "python/pyproject.toml", ".github/workflows/wheels.yml"]
+  workflow_dispatch:
+
+jobs:
+  accel:
+    name: accel ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # manylinux_2_28 x86_64 / aarch64, macOS x86_64 / arm64, Windows amd64.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pypa/cibuildwheel@v2.23
+        with:
+          package-dir: cpp
+          output-dir: wheelhouse
+      - uses: actions/upload-artifact@v4
+        with:
+          name: accel-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  pure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build --wheel --sdist --outdir dist python
+      - run: python -m build --sdist --outdir dist cpp
+      - name: The pure wheel must be py3-none-any
+        run: ls dist/*-py3-none-any.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pure
+          path: dist/*
+
+  install-check:
+    # Fresh environment per platform: install from the built artifacts only.
+    needs: [accel, pure]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-14, windows-latest]
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Install regresslens[accel] from the built wheels
+        shell: bash
+        run: |
+          python -m venv fresh
+          if [ -f fresh/Scripts/python.exe ]; then PY=fresh/Scripts/python.exe; else PY=fresh/bin/python; fi
+          $PY -m pip install --find-links artifacts "regresslens[accel]"
+          echo "PY=$PY" >> "$GITHUB_ENV"
+      - name: rglns --help and rglns run
+        shell: bash
+        run: |
+          $PY -m regresslens.cli --help
+          printf 'import numpy as np\nimport regresslens as rl\nprint(rl.accel_info())\nnp.convolve(np.ones(1000), np.ones(5))\nprint(rl.array(np.ones(10)).sum())\n' > sample.py
+          $PY -m regresslens.cli run -- python sample.py
+          $PY -c "import platform, regresslens as rl; i = rl.accel_info(); print(platform.machine(), i); \
+            assert i['native']; assert (i['isa'] == 'avx2') == (i.get('cpu_avx2_fma') and platform.machine().lower() in ('x86_64', 'amd64'))"
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [install-check]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # PyPI Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

@@ -3,17 +3,13 @@
 
 #include "regresslens/column.hpp"
 
-// This header defines the ONE interface Phase 3+ code is allowed to
-// depend on for kernel selection. Nothing downstream of this should
-// know or care whether the answer comes from a hand-written
-// heuristic (what's implemented today) or an online adaptive
-// selector (Phase 2's eventual output, deliberately deferred).
-//
-// Swapping the implementation behind KernelSelector is meant to be
-// the ONLY change required when Phase 2's research concludes. If a
-// future change requires touching code outside this file to adopt a
-// new selection policy, that's a sign the boundary leaked somewhere
-// and should be fixed, not worked around.
+// This header defines the ONE interface the rest of the code depends on
+// for kernel selection. Nothing downstream of it should know whether the
+// answer comes from the characterization-derived heuristic implemented
+// today (src/kernel_selector.cpp) or from a future online adaptive
+// selector. Swapping the implementation behind select_kernel() is meant
+// to be the only change such a switch requires; needing to touch code
+// outside that file would mean the boundary leaked.
 
 namespace regresslens {
 
@@ -21,7 +17,8 @@ enum class Operation {
     Reduction,
     Projection,
     Filter,
-    Rolling,
+    Rolling,     // rolling sum and rolling mean
+    RollingVar,  // scalar-only kernel
 };
 
 enum class KernelChoice {
@@ -41,14 +38,12 @@ struct SelectionContext {
     bool contiguous;
     unsigned available_threads;
 
-    // Only meaningful for Filter. Estimated or historical
-    // selectivity — v0.1's placeholder heuristic uses a fixed
-    // assumption when this isn't known in advance (see
-    // kernel_selector.cpp); a smarter policy could use runtime
-    // history here instead.
+    // Only meaningful for Filter. The Python layer passes the mean
+    // selectivity observed at this call site in earlier calls and
+    // runs (trace history), or 0.5 when there is none yet.
     double estimated_selectivity = 0.5;
 
-    // Only meaningful for Rolling.
+    // Only meaningful for Rolling / RollingVar.
     size_t window = 0;
 };
 

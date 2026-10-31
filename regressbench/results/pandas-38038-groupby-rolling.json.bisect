@@ -1,0 +1,36 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "bad52a9d1ef9fe6b27ef44fae99f483d07ad16f6",
+    "subject": "PERF: Use Indexers to implement groupby rolling (#34052)"
+  },
+  "probability": 1.0,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "bad52a9d1ef9fe6b27ef44fae99f483d07ad16f6",
+      "subject": "PERF: Use Indexers to implement groupby rolling (#34052)"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 1.6715422155448843e-67,
+  "effect": 2.8587582055969003,
+  "runs": 126,
+  "elapsed_s": 681.5160102844238,
+  "prior": "attribution prior from pandas/core/dtypes/cast.py:1182 maybe_castable: 3/35 commits touch its stack files ['/rb/bench/pandas_38038.py', 'pandas/core/construction.py', 'pandas/core/dtypes/cast.py', 'pandas/core/frame.py', 'pandas/core/internals/construction.py']",
+  "commits": 35,
+  "prior_files": [
+    "/rb/bench/pandas_38038.py",
+    "pandas/core/construction.py",
+    "pandas/core/dtypes/cast.py",
+    "pandas/core/frame.py",
+    "pandas/core/internals/construction.py"
+  ],
+  "prior_flagged": [
+    "7c46c68a6172de6fcb7b2cccc0c7d9a0d256bfe9",
+    "89f8af712ac329179f5e8b0bc8376c30357af4d6",
+    "833ce28b78e420cbdc06be7fd32e3d767c4eba2f"
+  ]
+}

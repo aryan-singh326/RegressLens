@@ -1,0 +1,33 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "d9f70b397a010754ae41e7d201bba05834294559",
+    "subject": "BUG: to_datetime with floats and unit not matching Timestamp (#56037)"
+  },
+  "probability": 0.9999999999740736,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "d9f70b397a010754ae41e7d201bba05834294559",
+      "subject": "BUG: to_datetime with floats and unit not matching Timestamp (#56037)"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 2.2988433664582394e-13,
+  "effect": 0.4607991731759207,
+  "runs": 126,
+  "elapsed_s": 634.8576431274414,
+  "prior": "attribution prior from pandas/core/construction.py:674 range_to_ndarray: 2/35 commits touch its stack files ['/rb/bench/pandas_57366.py', 'pandas/core/construction.py', 'pandas/core/series.py']",
+  "commits": 35,
+  "prior_files": [
+    "/rb/bench/pandas_57366.py",
+    "pandas/core/construction.py",
+    "pandas/core/series.py"
+  ],
+  "prior_flagged": [
+    "639bd6695940be8737db5c47b71b7ec6c4c88fb7",
+    "219bc5ecf872ed8527c0aef0b82167b051612c51"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "pandas-38038-groupby-rolling",
+  "project": "pandas",
+  "repo": "https://github.com/pandas-dev/pandas.git",
+  "issue": "https://github.com/pandas-dev/pandas/issues/38038",
+  "summary": "groupby(...).rolling(3).mean(): ~10x slower (MultiIndex.from_tuples per row)",
+  "culprit": {
+    "sha": "bad52a9d1ef9fe6b27ef44fae99f483d07ad16f6",
+    "pr": 34052,
+    "subject": "PERF: Use Indexers to implement groupby rolling (#34052)"
+  },
+  "expected_first_parent": "bad52a9d1ef9fe6b27ef44fae99f483d07ad16f6",
+  "good": "2391aa478bfa1d2c57b24414cd3d71669661fc36",
+  "bad": "8a4a4285fe529a7663b44274f108d89decc9c16a",
+  "fixed_by": [
+    "https://github.com/pandas-dev/pandas/pull/38057"
+  ],
+  "build": "C extensions (setup.py); every visit rebuilds",
+  "setup": "sed -i 's/extra_compile_args = \\[\"-Werror\"\\]/extra_compile_args = []/' setup.py && python setup.py build_ext --inplace -j 4 -q",
+  "environment": {
+    "python": "3.9",
+    "pip": [
+      "numpy==1.19.5",
+      "cython==0.29.21",
+      "python-dateutil",
+      "pytz",
+      "setuptools<60"
+    ],
+    "note": "Python 3.9 is RegressLens's minimum; NumPy 1.19.5 is the oldest with 3.9 wheels"
+  },
+  "bench": "pandas_38038.py",
+  "setup_note": "pandas compiled with -Werror at the time. Today's GCC and Python 3.9 raise warnings that did not exist then (deprecated PyUnicode APIs in Cython 0.29 output, GCC 12 -Warray-bounds), so the setup drops -Werror; the worktree checkout resets setup.py at every visit"
+}

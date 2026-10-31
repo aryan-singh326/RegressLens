@@ -1,46 +1,39 @@
-add_executable(test_column test_column.cpp)
-target_link_libraries(test_column PRIVATE regresslens_core)
+# Portable tests: no architecture flags.
+function(regresslens_test name)
+  add_executable(${name} ${name}.cpp)
+  target_link_libraries(${name} PRIVATE regresslens_kernels)
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
 
-add_executable(test_correctness_harness test_correctness_harness.cpp)
-target_link_libraries(test_correctness_harness PRIVATE regresslens_core)
+# Tests that include the AVX2 kernel headers directly. They are
+# compiled with AVX2 flags and exit with code 77 (reported as skipped)
+# when the CPU lacks AVX2. Kernel-set parity on any CPU is covered by
+# test_dispatch, which goes through the runtime dispatcher instead.
+function(regresslens_avx2_test name)
+  if(NOT REGRESSLENS_HAVE_AVX2_TU)
+    return()
+  endif()
+  add_executable(${name} ${name}.cpp)
+  target_link_libraries(${name} PRIVATE regresslens_kernels)
+  target_compile_options(${name} PRIVATE ${REGRESSLENS_AVX2_FLAGS})
+  add_test(NAME ${name} COMMAND ${name})
+  set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+endfunction()
 
-add_executable(test_reduction_scalar test_reduction_scalar.cpp)
-target_link_libraries(test_reduction_scalar PRIVATE regresslens_core)
+regresslens_test(test_column)
+regresslens_test(test_correctness_harness)
+regresslens_test(test_reduction_scalar)
+regresslens_test(test_projection_scalar)
+regresslens_test(test_filter_scalar)
+regresslens_test(test_rolling_scalar)
+regresslens_test(test_rolling_var)
+regresslens_test(test_nonfinite)
+regresslens_test(test_kernel_selector)
+regresslens_test(test_dispatch)
 
-add_executable(test_reduction_avx2 test_reduction_avx2.cpp)
-target_link_libraries(test_reduction_avx2 PRIVATE regresslens_core)
-# AVX2 opt-in applied ONLY to this target, not globally, so scalar
-# code stays portable per the project's kernel isolation policy.
-target_compile_options(test_reduction_avx2 PRIVATE -mavx2)
-
-add_executable(test_projection_scalar test_projection_scalar.cpp)
-target_link_libraries(test_projection_scalar PRIVATE regresslens_core)
-
-add_executable(test_projection_avx2 test_projection_avx2.cpp)
-target_link_libraries(test_projection_avx2 PRIVATE regresslens_core)
-target_compile_options(test_projection_avx2 PRIVATE -mavx2 -mfma)
-
-add_executable(test_filter_scalar test_filter_scalar.cpp)
-target_link_libraries(test_filter_scalar PRIVATE regresslens_core)
-
-add_executable(test_filter_avx2 test_filter_avx2.cpp)
-target_link_libraries(test_filter_avx2 PRIVATE regresslens_core)
-target_compile_options(test_filter_avx2 PRIVATE -mavx2)
-
-add_executable(test_rolling_scalar test_rolling_scalar.cpp)
-target_link_libraries(test_rolling_scalar PRIVATE regresslens_core)
-
-add_executable(test_rolling_avx2 test_rolling_avx2.cpp)
-target_link_libraries(test_rolling_avx2 PRIVATE regresslens_core)
-target_compile_options(test_rolling_avx2 PRIVATE -mavx2)
-
-add_executable(test_reduction_mt_avx2 test_reduction_mt_avx2.cpp)
-target_link_libraries(test_reduction_mt_avx2 PRIVATE regresslens_core Threads::Threads)
-target_compile_options(test_reduction_mt_avx2 PRIVATE -mavx2)
-
-add_executable(test_filter_mt_avx2 test_filter_mt_avx2.cpp)
-target_link_libraries(test_filter_mt_avx2 PRIVATE regresslens_core Threads::Threads)
-target_compile_options(test_filter_mt_avx2 PRIVATE -mavx2)
-
-add_executable(test_kernel_selector test_kernel_selector.cpp)
-target_link_libraries(test_kernel_selector PRIVATE regresslens_core)
+regresslens_avx2_test(test_reduction_avx2)
+regresslens_avx2_test(test_reduction_mt_avx2)
+regresslens_avx2_test(test_projection_avx2)
+regresslens_avx2_test(test_filter_avx2)
+regresslens_avx2_test(test_filter_mt_avx2)
+regresslens_avx2_test(test_rolling_avx2)

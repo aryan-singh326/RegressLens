@@ -1,22 +1,15 @@
-// Step 2 sanity check. This file has no long-term purpose beyond
-// proving the build works and telling you what the current machine
-// actually supports before you write AVX2 intrinsics against it.
+// Toolchain sanity check: confirms the build works and reports which
+// kernel sets this machine will use at runtime.
 #include <cstdio>
 
+#include "regresslens/dispatch.hpp"
+
 int main() {
-    __builtin_cpu_init();
-    bool has_avx2 = __builtin_cpu_supports("avx2");
-    bool has_avx512 = __builtin_cpu_supports("avx512f");
-
+    const regresslens::Runtime& rt = regresslens::runtime();
     std::printf("Toolchain OK.\n");
-    std::printf("AVX2 available:    %s\n", has_avx2 ? "yes" : "no");
-    std::printf("AVX-512 available: %s\n", has_avx512 ? "yes" : "no");
-
-    if (!has_avx2) {
-        std::printf(
-            "WARNING: this machine has no AVX2. v0.1 targets x86-64 "
-            "Linux with AVX2 — benchmarking here will not produce "
-            "valid characterization data.\n");
-    }
-    return 0;
+    std::printf("AVX2 kernels compiled in: %s\n", rt.avx2_compiled ? "yes" : "no");
+    std::printf("CPU supports AVX2+FMA:    %s\n", rt.cpu_avx2 ? "yes" : "no");
+    std::printf("Active kernel sets:       scalar%s\n", rt.avx2 ? ", avx2" : "");
+    if (!rt.error.empty()) std::printf("Dispatch error: %s\n", rt.error.c_str());
+    return rt.error.empty() ? 0 : 1;
 }

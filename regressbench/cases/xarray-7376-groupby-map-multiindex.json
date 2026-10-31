@@ -1,0 +1,30 @@
+{
+  "id": "xarray-7376-groupby-map-multiindex",
+  "project": "xarray",
+  "repo": "https://github.com/pydata/xarray.git",
+  "issue": "https://github.com/pydata/xarray/issues/7376",
+  "summary": "groupby(...).map on a MultiIndex dataset: ~680x slower (0.19 s -> 129 s at m=100k)",
+  "culprit": {
+    "sha": "3ead17ea9e99283e2511b65b9d864d1c7b10b3c4",
+    "pr": 5692,
+    "subject": "Explicit indexes (#5692)"
+  },
+  "expected_first_parent": "3ead17ea9e99283e2511b65b9d864d1c7b10b3c4",
+  "good": "555a70e290d8a13deb178da64d1d994a10f6acaf",
+  "bad": "f64f14bb4ff74fd8bd3bf9c1a1cd4b32c0deb305",
+  "fixed_by": [
+    "https://github.com/pydata/xarray/pull/7382",
+    "https://github.com/pydata/xarray/pull/7830"
+  ],
+  "build": "none (pure Python; the benchmark imports xarray from the checkout)",
+  "setup": null,
+  "environment": {
+    "python": "3.10",
+    "pip": [
+      "numpy==1.22.4",
+      "pandas==1.4.4",
+      "packaging"
+    ]
+  },
+  "bench": "xarray_7376.py"
+}

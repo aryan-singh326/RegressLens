@@ -1,0 +1,35 @@
+{
+  "id": "sklearn-29229-columntransformer-njobs",
+  "project": "scikit-learn",
+  "repo": "https://github.com/scikit-learn/scikit-learn.git",
+  "issue": "https://github.com/scikit-learn/scikit-learn/issues/29229",
+  "summary": "ColumnTransformer(n_jobs=2) sends the whole DataFrame to every worker: quadratic in transformers",
+  "culprit": {
+    "sha": "51fca394aa5236503c8abf1f056f50f823ec3d67",
+    "pr": 28822,
+    "subject": "Fix ColumnTransformer in parallel with joblib's auto memmapping (#28822)"
+  },
+  "expected_first_parent": "51fca394aa5236503c8abf1f056f50f823ec3d67",
+  "good": "af236f6df4f4388f41b59ac5564443822bc5fac2",
+  "bad": "171e124656a5d1d4fdbb41979e2b9da266fde9f4",
+  "fixed_by": [
+    "https://github.com/scikit-learn/scikit-learn/pull/29330"
+  ],
+  "build": "Cython extensions (meson); every visit rebuilds",
+  "setup": "python -m pip install -e . --no-build-isolation -q",
+  "environment": {
+    "python": "3.11",
+    "pip": [
+      "numpy==1.26.4",
+      "scipy==1.13.0",
+      "cython==3.0.10",
+      "meson-python",
+      "ninja",
+      "joblib==1.4.0",
+      "threadpoolctl",
+      "pandas==2.2.2"
+    ]
+  },
+  "bench": "sklearn_29229.py",
+  "good_note": "The original bracket started 3 commits earlier, at commits whose meson.build never copies sklearn/__init__.py into the build directory, so Cython rejects the relative cimports ('relative cimport from non-package directory') with any current Meson. good is the upstream fix, af236f6 (#28821); the culprit is commit 17 of 32"
+}

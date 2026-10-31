@@ -1,0 +1,19 @@
+{
+  "false_alarms_per_500": 0.055,
+  "delay": {
+    "detected": 0.981,
+    "within_5": 0.976,
+    "median": 2.0,
+    "p90": 3.0
+  },
+  "replay": {
+    "exit_code": 1,
+    "detected": true,
+    "output_tail": "e4ffcf5 2026-10-11 10:52    -2.4%      0.04\n  1a414b8025f1 2026-10-11 10:52    -1.0%      0.04\n  f7e015744b65 2026-10-11 10:52    -1.9%      0.05\n  aa23f4e1b066 2026-10-11 10:52    -4.5%      0.04\n  eb6276c69b4d 2026-10-11 10:52    -3.1%      0.06\n  39d9ff2f2c39 2026-10-11 10:52    -4.4%      0.11\n  d24c66233b84 2026-10-11 10:52   +12.5%      0.78\n  36ee0a285ff4 2026-10-11 10:52   +13.2%      1.00  <-- ALERT\n  1b52a74f2435 2026-10-11 10:52   +16.4%      1.00\n  cd078fdc222e 2026-10-11 10:52   +14.6%      1.00\nchange detected at session 36ee0a285ff4 (onset ~d24c66233b84), P = 1.00, shift +16.5%\n"
+  },
+  "_meta": {
+    "when": "2026-10-11 10:52",
+    "python": "3.14.7",
+    "machine": "Intel(R) Core(TM) Ultra 7 255U (14 threads, Windows)"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "scipy-5953-ckdtree-linf",
+  "project": "scipy",
+  "repo": "https://github.com/scipy/scipy.git",
+  "issue": "https://github.com/scipy/scipy/issues/5953",
+  "summary": "cKDTree.query with p=inf: ~10 s -> does not finish (runtime checks on p in the inner loop)",
+  "culprit": {
+    "sha": "58a10c2688398ab440de8d6d7b5fba29671df182",
+    "pr": 4890,
+    "subject": "EHN: add periodic boundary in k-NN query."
+  },
+  "expected_first_parent": "ee8eba7619ed64711b94426b7796c1551901f0bf",
+  "first_parent_note": "58a10c2 landed inside merge ee8eba7 (PR #4890); a first-parent bisect can only name the merge.",
+  "good": "8e5f3d76aa55686ff7e8c20c695c77eaa1b54e89",
+  "bad": "7f208fa57f6470e2c428b91bbfc38ed86a7d5269",
+  "fixed_by": [
+    "https://github.com/scipy/scipy/commit/558de6fe4323a127679c2ba1b9fbb84fcf571ca0"
+  ],
+  "build": "C/C++/Fortran extensions (setup.py, 2015 toolchain); every visit rebuilds",
+  "setup": "python setup.py build_ext --inplace -q",
+  "environment": {
+    "python": "3.5",
+    "pip": [
+      "numpy==1.10.4",
+      "cython==0.23.4"
+    ]
+  },
+  "bench": "scipy_5953.py"
+}

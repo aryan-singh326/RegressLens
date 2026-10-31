@@ -1,0 +1,520 @@
+{
+  "grid": [
+    {
+      "N": 16,
+      "effect": 0.03,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 0.9785,
+        "calibration": 0.9785,
+        "runs": 63.4525
+      },
+      "naive": {
+        "runs_per_step": 13,
+        "accuracy": 0.9675,
+        "runs": 92.0
+      },
+      "mwu": {
+        "runs_per_step": 13,
+        "accuracy": 0.97,
+        "runs": 92.0
+      }
+    },
+    {
+      "N": 16,
+      "effect": 0.03,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 0.8305,
+        "calibration": 0.9705,
+        "runs": 1086.6745
+      },
+      "naive": null,
+      "mwu": null
+    },
+    {
+      "N": 16,
+      "effect": 0.03,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.4525,
+        "calibration": 0.965,
+        "runs": 2842.6435
+      },
+      "naive": null,
+      "mwu": null
+    },
+    {
+      "N": 16,
+      "effect": 0.1,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 52.0015
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 0.9625,
+        "runs": 44.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.99,
+        "runs": 48.0
+      }
+    },
+    {
+      "N": 16,
+      "effect": 0.1,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 0.9925,
+        "calibration": 0.9925,
+        "runs": 56.7655
+      },
+      "naive": {
+        "runs_per_step": 8,
+        "accuracy": 0.9725,
+        "runs": 72.0
+      },
+      "mwu": {
+        "runs_per_step": 8,
+        "accuracy": 0.9775,
+        "runs": 72.0
+      }
+    },
+    {
+      "N": 16,
+      "effect": 0.1,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.9745,
+        "calibration": 0.983,
+        "runs": 212.1205
+      },
+      "naive": {
+        "runs_per_step": 89,
+        "accuracy": 0.98,
+        "runs": 396.0
+      },
+      "mwu": {
+        "runs_per_step": 55,
+        "accuracy": 0.9625,
+        "runs": 260.0
+      }
+    },
+    {
+      "N": 16,
+      "effect": 0.3,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 52.0
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 1.0,
+        "runs": 44.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.9825,
+        "runs": 48.0
+      }
+    },
+    {
+      "N": 16,
+      "effect": 0.3,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 52.0
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 0.9675,
+        "runs": 44.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.9825,
+        "runs": 48.0
+      }
+    },
+    {
+      "N": 16,
+      "effect": 0.3,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.997,
+        "calibration": 0.997,
+        "runs": 52.9285
+      },
+      "naive": {
+        "runs_per_step": 5,
+        "accuracy": 0.9975,
+        "runs": 60.0
+      },
+      "mwu": {
+        "runs_per_step": 5,
+        "accuracy": 0.9925,
+        "runs": 60.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.03,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 0.982,
+        "calibration": 0.982,
+        "runs": 79.3675
+      },
+      "naive": {
+        "runs_per_step": 21,
+        "accuracy": 0.985,
+        "runs": 187.0
+      },
+      "mwu": {
+        "runs_per_step": 21,
+        "accuracy": 0.98,
+        "runs": 187.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.03,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 0.7955,
+        "calibration": 0.9665,
+        "runs": 1088.368
+      },
+      "naive": null,
+      "mwu": null
+    },
+    {
+      "N": 128,
+      "effect": 0.03,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.4225,
+        "calibration": 0.9645,
+        "runs": 2853.6655
+      },
+      "naive": null,
+      "mwu": null
+    },
+    {
+      "N": 128,
+      "effect": 0.1,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 61.0045
+      },
+      "naive": {
+        "runs_per_step": 2,
+        "accuracy": 0.9925,
+        "runs": 54.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.9625,
+        "runs": 54.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.1,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 0.987,
+        "calibration": 0.987,
+        "runs": 68.077
+      },
+      "naive": {
+        "runs_per_step": 8,
+        "accuracy": 0.96,
+        "runs": 96.0
+      },
+      "mwu": {
+        "runs_per_step": 8,
+        "accuracy": 0.955,
+        "runs": 96.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.1,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.957,
+        "calibration": 0.9685,
+        "runs": 203.1685
+      },
+      "naive": {
+        "runs_per_step": 89,
+        "accuracy": 0.97,
+        "runs": 663.0
+      },
+      "mwu": {
+        "runs_per_step": 89,
+        "accuracy": 0.96,
+        "runs": 663.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.3,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 61.0
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 1.0,
+        "runs": 47.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.98,
+        "runs": 54.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.3,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 61.0015
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 0.9675,
+        "runs": 47.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.975,
+        "runs": 54.0
+      }
+    },
+    {
+      "N": 128,
+      "effect": 0.3,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.9995,
+        "calibration": 0.9995,
+        "runs": 62.3755
+      },
+      "naive": {
+        "runs_per_step": 5,
+        "accuracy": 0.9925,
+        "runs": 75.0
+      },
+      "mwu": {
+        "runs_per_step": 5,
+        "accuracy": 0.9775,
+        "runs": 75.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.03,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 0.977,
+        "calibration": 0.977,
+        "runs": 93.535
+      },
+      "naive": {
+        "runs_per_step": 21,
+        "accuracy": 0.9825,
+        "runs": 250.0
+      },
+      "mwu": {
+        "runs_per_step": 21,
+        "accuracy": 0.97,
+        "runs": 250.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.03,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 0.7905,
+        "calibration": 0.9675,
+        "runs": 1110.709
+      },
+      "naive": null,
+      "mwu": null
+    },
+    {
+      "N": 1024,
+      "effect": 0.03,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.4025,
+        "calibration": 0.962,
+        "runs": 2927.9425
+      },
+      "naive": null,
+      "mwu": null
+    },
+    {
+      "N": 1024,
+      "effect": 0.1,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 70.0015
+      },
+      "naive": {
+        "runs_per_step": 2,
+        "accuracy": 0.995,
+        "runs": 60.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.9525,
+        "runs": 60.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.1,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 0.986,
+        "calibration": 0.986,
+        "runs": 79.5205
+      },
+      "naive": {
+        "runs_per_step": 13,
+        "accuracy": 0.9775,
+        "runs": 170.0
+      },
+      "mwu": {
+        "runs_per_step": 13,
+        "accuracy": 0.9675,
+        "runs": 170.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.1,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.955,
+        "calibration": 0.968,
+        "runs": 228.271
+      },
+      "naive": {
+        "runs_per_step": 89,
+        "accuracy": 0.9575,
+        "runs": 930.0
+      },
+      "mwu": {
+        "runs_per_step": 89,
+        "accuracy": 0.95,
+        "runs": 930.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.3,
+      "sigma": 0.02,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 70.0
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 1.0,
+        "runs": 50.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.9675,
+        "runs": 60.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.3,
+      "sigma": 0.05,
+      "ours": {
+        "accuracy": 1.0,
+        "calibration": 1.0,
+        "runs": 70.0015
+      },
+      "naive": {
+        "runs_per_step": 1,
+        "accuracy": 0.9525,
+        "runs": 50.0
+      },
+      "mwu": {
+        "runs_per_step": 2,
+        "accuracy": 0.9625,
+        "runs": 60.0
+      }
+    },
+    {
+      "N": 1024,
+      "effect": 0.3,
+      "sigma": 0.1,
+      "ours": {
+        "accuracy": 0.9985,
+        "calibration": 0.9985,
+        "runs": 72.055
+      },
+      "naive": {
+        "runs_per_step": 5,
+        "accuracy": 0.9775,
+        "runs": 90.0
+      },
+      "mwu": {
+        "runs_per_step": 5,
+        "accuracy": 0.97,
+        "runs": 90.0
+      }
+    }
+  ],
+  "prior_ablation": {
+    "uniform": {
+      "accuracy": 0.992,
+      "calibration": 0.992,
+      "runs": 68.095
+    },
+    "informative_0.8": {
+      "accuracy": 0.995,
+      "calibration": 0.995,
+      "runs": 64.627
+    },
+    "misleading": {
+      "accuracy": 0.98,
+      "calibration": 0.98,
+      "runs": 69.22
+    }
+  },
+  "trials": 2000,
+  "search_trials": 400,
+  "_meta": {
+    "when": "2026-10-10 17:59",
+    "python": "3.14.7",
+    "machine": "Intel(R) Core(TM) Ultra 7 255U (14 threads, Windows)"
+  }
+}

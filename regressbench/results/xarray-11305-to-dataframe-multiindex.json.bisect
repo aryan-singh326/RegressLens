@@ -1,0 +1,37 @@
+{
+  "converged": true,
+  "culprit": {
+    "index": 20,
+    "sha": "a13a2556a29b3c5ba342a402b2598bab42939b46",
+    "subject": "Upgrade mypy to 1.17.1 and fix all type errors (#10694)"
+  },
+  "probability": 0.9999999999999285,
+  "credible_set": [
+    {
+      "index": 20,
+      "sha": "a13a2556a29b3c5ba342a402b2598bab42939b46",
+      "subject": "Upgrade mypy to 1.17.1 and fix all type errors (#10694)"
+    }
+  ],
+  "unbuildable_range": null,
+  "gradual": false,
+  "drift_bayes_factor": 1.5340421814315197e-13,
+  "effect": 2.396807073938746,
+  "runs": 38,
+  "elapsed_s": 51.71630144119263,
+  "prior": "attribution prior from xarray/core/variable.py:336 _as_array_or_item: 5/35 commits touch its stack files ['/rb/bench/xarray_11305.py', 'xarray/core/dataarray.py', 'xarray/core/dataset.py', 'xarray/core/variable.py']",
+  "commits": 35,
+  "prior_files": [
+    "/rb/bench/xarray_11305.py",
+    "xarray/core/dataarray.py",
+    "xarray/core/dataset.py",
+    "xarray/core/variable.py"
+  ],
+  "prior_flagged": [
+    "98732e76481bdf5c497a030657cff32db134e27d",
+    "722f0ad3deb4d000704e685546bc7d5723315c60",
+    "a13a2556a29b3c5ba342a402b2598bab42939b46",
+    "6336ffb911c33de90d58bd8220b89181c72395a3",
+    "40c27d19d169ccf1c469255c6c6da327f5822d01"
+  ]
+}

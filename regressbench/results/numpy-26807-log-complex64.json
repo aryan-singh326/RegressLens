@@ -1,0 +1,18 @@
+{
+  "id": "numpy-26807-log-complex64",
+  "elapsed_s": 863.1676416397095,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: 1cd92a1483 Merge pull request #24085 from lysnikolaou/real-imag-remove (p = 1.000, effect +40.7%)\n  95% credible set (1 commit): 1cd92a1483\n  126 runs over 35 commits in 861 s; uniform prior (no commit touches the stack files of /rb/bench/numpy_26807.py:6: ['/rb/bench/numpy_26807.py'])\n",
+  "stderr_tail": "bisecting 35 commits (d50fc570a9..4359c877d8)\nendpoints: bad vs good +48.8% (canary-adjusted)\nuniform prior (no commit touches the stack files of /rb/bench/numpy_26807.py:6: ['/rb/bench/numpy_26807.py'])\nbatch size per visit: 20 (build 83.0 s, run 0.39 s)\n  visit 1: commit 17 e4ce121105 -0.2% vs good; best 18 p=0.06\n  visit 2: commit 26 d99dd6de6b +39.9% vs good; best 18 p=0.11\n  visit 3: commit 21 ba669d69ad +39.4% vs good; best 18 p=0.25\n  visit 4: commit 19 8bbfa6de18 +0.6% vs good; best 20 p=0.50\n  visit 5: commit 20 1cd92a1483 +39.9% vs good; best 20 p=1.00\n",
+  "found": "1cd92a1483227d26b5d770f1916549caca51f50b",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 1.0,
+  "runs": 126,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "uniform prior (no commit touches the stack files of /rb/bench/numpy_26807.py:6: ['/rb/bench/numpy_26807.py'])",
+  "prior_flagged": 0,
+  "prior_flags_culprit": false
+}

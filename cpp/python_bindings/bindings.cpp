@@ -1,337 +1,352 @@
-// Python bridge for RegressLens native kernels. Starts with ONE
-// operation (reduction) end-to-end, same discipline as Phase 1:
-// prove the mechanism works before replicating it three more times
-// for projection/filter/rolling.
+// Python bridge for the RegressLens native kernels
+// (module regresslens_accel._native, shipped in the regresslens-accel
+// wheel and loaded lazily by regresslens._accel).
+//
+// Compiled WITHOUT architecture flags. Every kernel call goes through
+// a KernelSet chosen at runtime (see dispatch.hpp), so importing this
+// module is safe on any CPU of the target architecture.
+//
+// Every operation returns the kernel actually used and the kernel's
+// runtime in ns alongside the result. The timer wraps only the kernel
+// itself: validation, selection and output allocation are the
+// interception overhead, measured separately. The GIL is released
+// while a kernel runs.
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include <cfloat>
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
+#include <string>
 #include <thread>
 
-#include "regresslens/filter_avx2.hpp"
-#include "regresslens/filter_mt_avx2.hpp"
-#include "regresslens/filter_scalar.hpp"
+#include "regresslens/compensated.hpp"
+#include "regresslens/cpu_features.hpp"
+#include "regresslens/dispatch.hpp"
 #include "regresslens/kernel_selector.hpp"
-#include "regresslens/projection_avx2.hpp"
-#include "regresslens/projection_scalar.hpp"
-#include "regresslens/reduction_avx2.hpp"
-#include "regresslens/reduction_mt_avx2.hpp"
-#include "regresslens/reduction_scalar.hpp"
-#include "regresslens/rolling_avx2.hpp"
-#include "regresslens/rolling_scalar.hpp"
+#include "regresslens/kernels.hpp"
 
 namespace py = pybind11;
 using namespace regresslens;
 
+namespace regresslens {
+int add_monitor_functions(PyObject* module);  // monitor.cpp
+}
+
 namespace {
 
-const char* kernel_choice_name(KernelChoice k) {
-    switch (k) {
-        case KernelChoice::Scalar: return "scalar";
-        case KernelChoice::Avx2: return "avx2";
-        case KernelChoice::MtAvx2: return "mt_avx2";
-    }
-    return "unknown";
-}
-
-struct ArrayInfo {
-    py::buffer_info info;
-    bool contiguous;
-    DType dtype;
-    size_t n;
-};
-
-// Shared by all four operation bindings — extracts and validates the
-// dtype/contiguity/size info every one of them needs, so that logic
-// exists in exactly one place rather than four slightly-different
-// copies.
-ArrayInfo get_array_info(py::array& arr, const char* fn_name) {
-    py::buffer_info info = arr.request();
-    bool contiguous = (info.strides.size() == 1 &&
-                        info.strides[0] == static_cast<py::ssize_t>(info.itemsize));
-    if (!contiguous) {
-        throw std::invalid_argument(
-            std::string(fn_name) +
-            ": non-contiguous array. The Python layer should route this "
-            "to NumPy fallback, not call this function directly.");
-    }
-
-    std::string dtype_str = py::str(arr.dtype());
-    DType dtype;
-    if (dtype_str.find("float64") != std::string::npos) {
-        dtype = DType::Float64;
-    } else if (dtype_str.find("float32") != std::string::npos) {
-        dtype = DType::Float32;
-    } else {
-        throw std::invalid_argument(std::string(fn_name) + ": unsupported dtype '" +
-                                     dtype_str +
-                                     "'. v0.1 supports float32 and float64 only.");
-    }
-
-    size_t n = static_cast<size_t>(info.shape.empty() ? 0 : info.shape[0]);
-    return ArrayInfo{std::move(info), contiguous, dtype, n};
-}
-
-// Dispatches to the selected kernel for a given typed buffer. Kept
-// as its own template so float32/float64 share dispatch logic
-// instead of duplicating the switch statement per dtype.
-template <typename T>
-double dispatch_reduce_sum(const T* data, size_t n, KernelChoice choice,
-                            unsigned threads) {
-    switch (choice) {
-        case KernelChoice::Scalar:
-            return static_cast<double>(reduce_sum_scalar<T>(data, n));
-        case KernelChoice::Avx2:
-            return static_cast<double>(reduce_sum_avx2(data, n));
-        case KernelChoice::MtAvx2:
-            return static_cast<double>(reduce_sum_mt_avx2<T>(data, n, threads));
-    }
-    throw std::logic_error("unreachable: unknown KernelChoice");
-}
+// Bumped whenever the Python-visible signature of this module changes.
+// regresslens checks it and falls back to NumPy on a mismatch rather
+// than calling an incompatible extension.
+constexpr int kAbiVersion = 2;
 
 using Clock = std::chrono::steady_clock;
 inline double elapsed_ns(Clock::time_point t0, Clock::time_point t1) {
     return std::chrono::duration<double, std::nano>(t1 - t0).count();
 }
 
-// The one function exposed for reduction. Returns (value, kernel_name,
-// runtime_ns) rather than just the value, because Phase 3's trace
-// persistence needs to know which kernel ran and how long it took
-// for every call — this is that observability hook, exposed from the
-// start rather than retrofitted. Timing wraps ONLY the kernel
-// dispatch, not array validation/dtype detection/selection — those
-// are the "interception overhead" the project brief tracks
-// separately (see cpp/bench/characterize.cpp), not part of the
-// kernel's own runtime.
-py::tuple reduce_sum_native(py::array arr, int threads_override) {
-    ArrayInfo ai = get_array_info(arr, "reduce_sum_native");
+struct Input {
+    const void* ptr;
+    size_t n;
+    DType dtype;
+};
 
-    unsigned hw_threads = std::thread::hardware_concurrency();
-    if (hw_threads == 0) hw_threads = 1;
-    unsigned threads = threads_override > 0 ? static_cast<unsigned>(threads_override)
-                                             : hw_threads;
-
-    SelectionContext ctx{Operation::Reduction, ai.dtype, ai.n, ai.contiguous, threads};
-    KernelChoice choice = select_kernel(ctx);
-
-    auto t0 = Clock::now();
-    double result;
-    if (ai.dtype == DType::Float64) {
-        result = dispatch_reduce_sum<double>(static_cast<const double*>(ai.info.ptr),
-                                              ai.n, choice, threads);
+// Accepts only 1-D, C-contiguous float32/float64 arrays. The Python
+// layer routes everything else to its NumPy fallback; reaching this
+// error means that routing has a bug.
+Input get_input(const py::array& arr, const char* fn) {
+    if (arr.ndim() != 1) {
+        throw std::invalid_argument(std::string(fn) + ": expected a 1-D array");
+    }
+    if (!(arr.flags() & py::array::c_style)) {
+        throw std::invalid_argument(std::string(fn) +
+                                    ": non-contiguous array (use the NumPy fallback)");
+    }
+    DType dtype;
+    if (arr.dtype().is(py::dtype::of<double>())) {
+        dtype = DType::Float64;
+    } else if (arr.dtype().is(py::dtype::of<float>())) {
+        dtype = DType::Float32;
     } else {
-        result = dispatch_reduce_sum<float>(static_cast<const float*>(ai.info.ptr),
-                                             ai.n, choice, threads);
+        throw std::invalid_argument(std::string(fn) + ": unsupported dtype " +
+                                    std::string(py::str(arr.dtype())) +
+                                    " (float32/float64 only)");
+    }
+    return Input{arr.data(), static_cast<size_t>(arr.shape(0)), dtype};
+}
+
+unsigned resolve_threads(int threads) {
+    if (threads > 0) return static_cast<unsigned>(threads);
+    unsigned hw = std::thread::hardware_concurrency();
+    return hw == 0 ? 1u : hw;
+}
+
+template <typename T>
+const OpTable<T>& table_for(const KernelSet& set);
+template <>
+const OpTable<float>& table_for<float>(const KernelSet& set) { return set.f32; }
+template <>
+const OpTable<double>& table_for<double>(const KernelSet& set) { return set.f64; }
+
+// --- Reduction ---
+
+template <typename T>
+py::tuple reduce_typed(const Input& in, KernelChoice choice, unsigned threads, bool mean) {
+    const OpTable<T>& t = table_for<T>(kernel_set_for(choice));
+    const T* p = static_cast<const T*>(in.ptr);
+    SumParts parts{};
+    auto t0 = Clock::now();
+    {
+        py::gil_scoped_release release;
+        parts = (choice == KernelChoice::MtAvx2) ? t.sum_mt(p, in.n, threads)
+                                                 : t.sum(p, in.n);
     }
     auto t1 = Clock::now();
+    // The mean divides the compensated (double-double) sum, so it is
+    // rounded once, not twice.
+    const double value = mean ? mean_from_parts(parts, static_cast<double>(in.n))
+                              : finish_sum(parts);
+    return py::make_tuple(value, kernel_choice_name(choice), elapsed_ns(t0, t1));
+}
 
-    return py::make_tuple(result, kernel_choice_name(choice), elapsed_ns(t0, t1));
+py::tuple reduce(const py::array& arr, const std::string& kernel, int threads, bool mean) {
+    Input in = get_input(arr, mean ? "reduce_mean" : "reduce_sum");
+    if (mean && in.n == 0) throw std::invalid_argument("reduce_mean: empty array");
+    unsigned th = resolve_threads(threads);
+    SelectionContext ctx{Operation::Reduction, in.dtype, in.n, true, th};
+    KernelChoice choice = resolve_kernel(ctx, kernel, /*op_has_mt=*/true);
+    return in.dtype == DType::Float64 ? reduce_typed<double>(in, choice, th, mean)
+                                      : reduce_typed<float>(in, choice, th, mean);
 }
 
 // --- Projection ---
 
 template <typename T>
-void dispatch_project_affine(const T* in, T* out, size_t n, T scale, T offset,
-                              KernelChoice choice) {
-    switch (choice) {
-        case KernelChoice::Scalar:
-            project_affine_scalar<T>(in, out, n, scale, offset);
-            return;
-        case KernelChoice::Avx2:
-            project_affine_avx2(in, out, n, scale, offset);
-            return;
-        case KernelChoice::MtAvx2:
-            // No MT variant exists for projection — it's memory-
-            // bandwidth-bound, so the placeholder heuristic never
-            // selects MtAvx2 for this op (see kernel_selector.cpp).
-            // Falling through to AVX2 here is defensive, not
-            // expected to ever execute.
-            project_affine_avx2(in, out, n, scale, offset);
-            return;
+py::tuple project_typed(const Input& in, double scale, double offset,
+                        KernelChoice choice) {
+    const OpTable<T>& t = table_for<T>(kernel_set_for(choice));
+    py::array_t<T> out(static_cast<py::ssize_t>(in.n));
+    T* o = out.mutable_data();
+    auto t0 = Clock::now();
+    {
+        py::gil_scoped_release release;
+        t.project_affine(static_cast<const T*>(in.ptr), o, in.n, static_cast<T>(scale),
+                         static_cast<T>(offset));
     }
+    auto t1 = Clock::now();
+    return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
 }
 
-py::tuple project_affine_native(py::array arr, double scale, double offset) {
-    ArrayInfo ai = get_array_info(arr, "project_affine_native");
-    unsigned hw_threads = std::thread::hardware_concurrency();
-    if (hw_threads == 0) hw_threads = 1;
-
-    SelectionContext ctx{Operation::Projection, ai.dtype, ai.n, ai.contiguous,
-                          hw_threads};
-    KernelChoice choice = select_kernel(ctx);
-
-    if (ai.dtype == DType::Float64) {
-        py::array_t<double> out(ai.n);
-        auto t0 = Clock::now();
-        dispatch_project_affine<double>(static_cast<const double*>(ai.info.ptr),
-                                         out.mutable_data(), ai.n, scale, offset,
-                                         choice);
-        auto t1 = Clock::now();
-        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
-    } else {
-        py::array_t<float> out(ai.n);
-        auto t0 = Clock::now();
-        dispatch_project_affine<float>(static_cast<const float*>(ai.info.ptr),
-                                        out.mutable_data(), ai.n,
-                                        static_cast<float>(scale),
-                                        static_cast<float>(offset), choice);
-        auto t1 = Clock::now();
-        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
-    }
+py::tuple project_affine(const py::array& arr, double scale, double offset,
+                         const std::string& kernel) {
+    Input in = get_input(arr, "project_affine");
+    SelectionContext ctx{Operation::Projection, in.dtype, in.n, true,
+                         resolve_threads(0)};
+    KernelChoice choice = resolve_kernel(ctx, kernel, /*op_has_mt=*/false);
+    return in.dtype == DType::Float64 ? project_typed<double>(in, scale, offset, choice)
+                                      : project_typed<float>(in, scale, offset, choice);
 }
 
 // --- Filter ---
 
 template <typename T>
-size_t dispatch_filter_gt(const T* in, T* out, size_t n, T threshold,
-                           KernelChoice choice, unsigned threads) {
-    switch (choice) {
-        case KernelChoice::Scalar:
-            return filter_gt_scalar<T>(in, out, n, threshold);
-        case KernelChoice::Avx2:
-            return filter_gt_avx2(in, out, n, threshold);
-        case KernelChoice::MtAvx2:
-            return filter_gt_mt_avx2<T>(in, out, n, threshold, threads);
+py::tuple filter_typed(const Input& in, double threshold, KernelChoice choice,
+                       unsigned threads) {
+    const OpTable<T>& t = table_for<T>(kernel_set_for(choice));
+    // Output size is data-dependent: allocate the worst case (every
+    // element passes); the caller slices to [:count].
+    py::array_t<T> out(static_cast<py::ssize_t>(in.n));
+    T* o = out.mutable_data();
+    const T* p = static_cast<const T*>(in.ptr);
+    const T th = static_cast<T>(threshold);
+    size_t count = 0;
+    auto t0 = Clock::now();
+    {
+        py::gil_scoped_release release;
+        count = (choice == KernelChoice::MtAvx2) ? t.filter_gt_mt(p, o, in.n, th, threads)
+                                                 : t.filter_gt(p, o, in.n, th);
     }
-    throw std::logic_error("unreachable: unknown KernelChoice");
+    auto t1 = Clock::now();
+    return py::make_tuple(out, count, kernel_choice_name(choice), elapsed_ns(t0, t1));
 }
 
-py::tuple filter_gt_native(py::array arr, double threshold, int threads_override,
-                            double estimated_selectivity) {
-    ArrayInfo ai = get_array_info(arr, "filter_gt_native");
-    unsigned hw_threads = std::thread::hardware_concurrency();
-    if (hw_threads == 0) hw_threads = 1;
-    unsigned threads = threads_override > 0 ? static_cast<unsigned>(threads_override)
-                                             : hw_threads;
-
-    SelectionContext ctx{Operation::Filter, ai.dtype, ai.n, ai.contiguous, threads};
-    // estimated_selectivity now comes from the CALLER (the Python
-    // layer's trace-history lookup — see array.py's filter_gt),
-    // not a hardcoded assumption. -1 (or anything outside [0,1])
-    // means "no real estimate available", in which case 0.5 (the
-    // neutral middle of the AVX2-favorable band) is used, matching
-    // the previous flat-default behavior for callers without
-    // history yet.
+py::tuple filter_gt(const py::array& arr, double threshold, const std::string& kernel,
+                    int threads, double estimated_selectivity) {
+    Input in = get_input(arr, "filter_gt");
+    unsigned th = resolve_threads(threads);
+    SelectionContext ctx{Operation::Filter, in.dtype, in.n, true, th};
+    // Outside [0, 1] (the Python layer passes -1) means "no history".
     ctx.estimated_selectivity =
         (estimated_selectivity >= 0.0 && estimated_selectivity <= 1.0)
             ? estimated_selectivity
             : 0.5;
-    KernelChoice choice = select_kernel(ctx);
-
-    if (ai.dtype == DType::Float64) {
-        py::array_t<double> out(ai.n);  // worst case: everything passes
-        auto t0 = Clock::now();
-        size_t count = dispatch_filter_gt<double>(
-            static_cast<const double*>(ai.info.ptr), out.mutable_data(), ai.n,
-            threshold, choice, threads);
-        auto t1 = Clock::now();
-        return py::make_tuple(out, count, kernel_choice_name(choice),
-                               elapsed_ns(t0, t1));
-    } else {
-        py::array_t<float> out(ai.n);
-        auto t0 = Clock::now();
-        size_t count = dispatch_filter_gt<float>(
-            static_cast<const float*>(ai.info.ptr), out.mutable_data(), ai.n,
-            static_cast<float>(threshold), choice, threads);
-        auto t1 = Clock::now();
-        return py::make_tuple(out, count, kernel_choice_name(choice),
-                               elapsed_ns(t0, t1));
-    }
+    KernelChoice choice = resolve_kernel(ctx, kernel, /*op_has_mt=*/true);
+    return in.dtype == DType::Float64 ? filter_typed<double>(in, threshold, choice, th)
+                                      : filter_typed<float>(in, threshold, choice, th);
 }
 
 // --- Rolling ---
 
+enum class RollingOp { Sum, Mean, Var };
+
+// Finite inputs above this magnitude could overflow a window
+// accumulator. They return None so the Python layer uses NumPy, whose
+// overflow behavior then applies unchanged.
 template <typename T>
-size_t dispatch_rolling_sum(const T* in, T* out, size_t n, size_t window,
-                             KernelChoice choice) {
-    switch (choice) {
-        case KernelChoice::Scalar:
-            return rolling_sum_scalar<T>(in, out, n, window);
-        case KernelChoice::Avx2:
-        case KernelChoice::MtAvx2:
-            // No MT variant exists for rolling. AVX2 requested but
-            // characterization showed scalar wins outright for this
-            // op — the placeholder heuristic never selects Avx2 or
-            // MtAvx2 here (see kernel_selector.cpp). This branch is
-            // defensive dead code, kept correct rather than removed,
-            // in case the heuristic changes before this comment does.
-            return rolling_sum_avx2(in, out, n, window);
-    }
-    throw std::logic_error("unreachable: unknown KernelChoice");
+bool overflow_risk(const ScanResult& scan, size_t window, RollingOp op) {
+    if (sizeof(T) == sizeof(float)) return false;  // accumulated in double
+    if (op == RollingOp::Var) return scan.absmax > 1e150;
+    return scan.absmax > DBL_MAX / (4.0 * static_cast<double>(window));
 }
 
-py::tuple rolling_sum_native(py::array arr, size_t window) {
-    ArrayInfo ai = get_array_info(arr, "rolling_sum_native");
-    unsigned hw_threads = std::thread::hardware_concurrency();
-    if (hw_threads == 0) hw_threads = 1;
+template <typename T>
+py::tuple rolling_typed(const Input& in, size_t window, size_t ddof, RollingOp op,
+                        KernelChoice choice) {
+    const OpTable<T>& t = table_for<T>(kernel_set_for(choice));
+    const T* p = static_cast<const T*>(in.ptr);
+    const size_t out_count = in.n - window + 1;
+    py::array_t<T> out(static_cast<py::ssize_t>(out_count));
+    T* o = out.mutable_data();
 
-    SelectionContext ctx{Operation::Rolling, ai.dtype, ai.n, ai.contiguous,
-                          hw_threads};
-    ctx.window = window;
-    KernelChoice choice = select_kernel(ctx);
-
-    size_t out_count = (window == 0 || ai.n < window) ? 0 : ai.n - window + 1;
-
-    if (ai.dtype == DType::Float64) {
-        py::array_t<double> out(out_count);
-        auto t0 = Clock::now();
-        size_t count = dispatch_rolling_sum<double>(
-            static_cast<const double*>(ai.info.ptr), out.mutable_data(), ai.n,
-            window, choice);
-        auto t1 = Clock::now();
-        (void)count;  // == out_count by construction; kept for symmetry/clarity
-        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
-    } else {
-        py::array_t<float> out(out_count);
-        auto t0 = Clock::now();
-        size_t count = dispatch_rolling_sum<float>(
-            static_cast<const float*>(ai.info.ptr), out.mutable_data(), ai.n,
-            window, choice);
-        auto t1 = Clock::now();
-        (void)count;
-        return py::make_tuple(out, kernel_choice_name(choice), elapsed_ns(t0, t1));
+    const char* kernel_name = kernel_choice_name(choice);
+    bool fallback = false;
+    auto t0 = Clock::now();
+    {
+        py::gil_scoped_release release;
+        // The one-pass scan is part of the kernel's cost, so it is
+        // inside the timed region.
+        ScanResult scan = t.scan(p, in.n);
+        if (overflow_risk<T>(scan, window, op)) {
+            fallback = true;
+        } else if (op == RollingOp::Var) {
+            rolling_var(p, o, in.n, window, ddof);
+            kernel_name = "scalar";
+        } else if (scan.nonfinite) {
+            if (op == RollingOp::Sum) {
+                rolling_sum_nonfinite(p, o, in.n, window);
+            } else {
+                rolling_mean_nonfinite(p, o, in.n, window);
+            }
+            kernel_name = "scalar_nf";
+        } else if (op == RollingOp::Sum) {
+            t.rolling_sum(p, o, in.n, window);
+        } else {
+            t.rolling_mean(p, o, in.n, window);
+        }
     }
+    auto t1 = Clock::now();
+    if (fallback) {
+        return py::make_tuple(py::none(), "numpy_fallback", elapsed_ns(t0, t1));
+    }
+    return py::make_tuple(out, kernel_name, elapsed_ns(t0, t1));
+}
+
+py::tuple rolling(const py::array& arr, size_t window, size_t ddof, RollingOp op,
+                  const std::string& kernel, const char* fn) {
+    Input in = get_input(arr, fn);
+    if (window == 0) throw std::invalid_argument(std::string(fn) + ": window must be >= 1");
+    if (in.n < window) {
+        // No complete window: empty result, no kernel ran.
+        py::array out = in.dtype == DType::Float64
+                            ? py::array(py::array_t<double>(0))
+                            : py::array(py::array_t<float>(0));
+        return py::make_tuple(out, "none", 0.0);
+    }
+    SelectionContext ctx{op == RollingOp::Var ? Operation::RollingVar : Operation::Rolling,
+                         in.dtype, in.n, true, resolve_threads(0)};
+    ctx.window = window;
+    KernelChoice choice = op == RollingOp::Var
+                              ? KernelChoice::Scalar
+                              : resolve_kernel(ctx, kernel, /*op_has_mt=*/false);
+    return in.dtype == DType::Float64
+               ? rolling_typed<double>(in, window, ddof, op, choice)
+               : rolling_typed<float>(in, window, ddof, op, choice);
+}
+
+py::dict info() {
+    const Runtime& rt = runtime();
+    py::dict d;
+    d["abi_version"] = kAbiVersion;
+    d["avx2_compiled"] = rt.avx2_compiled;
+    d["cpu_avx2_fma"] = rt.cpu_avx2;
+    d["avx2_active"] = rt.avx2 != nullptr;
+    d["forced_kernel"] = rt.forced == ForcedKernel::Scalar ? "scalar"
+                         : rt.forced == ForcedKernel::Avx2 ? "avx2"
+                                                           : "";
+    d["isa"] = rt.avx2 != nullptr ? "avx2" : "scalar";
+    return d;
 }
 
 }  // namespace
 
-PYBIND11_MODULE(_regresslens_native, m) {
-    m.doc() = "RegressLens native kernel bindings (internal — use the "
-              "regresslens Python package, not this module directly)";
+PYBIND11_MODULE(_native, m) {
+    m.doc() = "RegressLens native kernels (internal: use the regresslens package)";
 
-    m.def("reduce_sum_native", &reduce_sum_native, py::arg("array"),
-          py::arg("threads_override") = -1,
-          "Sum-reduce a contiguous float32/float64 NumPy array using the "
-          "kernel selector. Returns (value, kernel_name_used, "
-          "runtime_ns). Raises on non-contiguous input — callers should "
-          "fall back to NumPy in that case, not treat this as a bug to "
-          "work around here.");
+    const Runtime& rt = runtime();
+    if (!rt.error.empty()) {
+        throw py::import_error("regresslens_accel: " + rt.error);
+    }
 
-    m.def("project_affine_native", &project_affine_native, py::arg("array"),
-          py::arg("scale"), py::arg("offset"),
-          "Elementwise out = scale*in + offset on a contiguous "
-          "float32/float64 NumPy array. Returns (result_array, "
-          "kernel_name_used, runtime_ns). Raises on non-contiguous "
-          "input.");
+    m.attr("ABI_VERSION") = kAbiVersion;
+    // sys.monitoring fast path for `rglns run` (raw METH_FASTCALL functions).
+    if (regresslens::add_monitor_functions(m.ptr()) < 0) throw py::error_already_set();
 
-    m.def("filter_gt_native", &filter_gt_native, py::arg("array"),
-          py::arg("threshold"), py::arg("threads_override") = -1,
+    m.def("info", &info, "Build and runtime kernel-dispatch information.");
+
+    m.def(
+        "reduce_sum",
+        [](const py::array& a, const std::string& kernel, int threads) {
+            return reduce(a, kernel, threads, false);
+        },
+        py::arg("array"), py::arg("kernel") = "auto", py::arg("threads") = 0,
+        "Compensated sum of a 1-D contiguous float32/float64 array, accumulated in "
+        "double. Returns (value, kernel, runtime_ns).");
+
+    m.def(
+        "reduce_mean",
+        [](const py::array& a, const std::string& kernel, int threads) {
+            return reduce(a, kernel, threads, true);
+        },
+        py::arg("array"), py::arg("kernel") = "auto", py::arg("threads") = 0,
+        "Mean (compensated sum divided with a single rounding). Returns "
+        "(value, kernel, runtime_ns).");
+
+    m.def("project_affine", &project_affine, py::arg("array"), py::arg("scale"),
+          py::arg("offset"), py::arg("kernel") = "auto",
+          "out = scale * x + offset. Returns (out, kernel, runtime_ns).");
+
+    m.def("filter_gt", &filter_gt, py::arg("array"), py::arg("threshold"),
+          py::arg("kernel") = "auto", py::arg("threads") = 0,
           py::arg("estimated_selectivity") = -1.0,
-          "Threshold filter (strictly greater than) on a contiguous "
-          "float32/float64 NumPy array. estimated_selectivity (0.0-1.0, "
-          "or -1 for 'unknown') informs kernel selection — pass a "
-          "trace-history-derived estimate when available. Returns "
-          "(full_capacity_array, valid_count, kernel_name_used, "
-          "runtime_ns) — caller must slice to [:valid_count]; the "
-          "returned array is allocated at worst-case size (n) since "
-          "filter's output size is data-dependent and unknown before the "
-          "kernel runs. Raises on non-contiguous input.");
+          "Elements strictly greater than threshold, in order. Returns "
+          "(capacity_n_array, count, kernel, runtime_ns); slice to [:count].");
 
-    m.def("rolling_sum_native", &rolling_sum_native, py::arg("array"),
-          py::arg("window"),
-          "Fixed-window rolling sum on a contiguous float32/float64 "
-          "NumPy array. Returns (result_array, kernel_name_used, "
-          "runtime_ns), where result_array has length "
-          "max(0, n - window + 1). Raises on non-contiguous input.");
+    m.def(
+        "rolling_sum",
+        [](const py::array& a, size_t window, const std::string& kernel) {
+            return rolling(a, window, 0, RollingOp::Sum, kernel, "rolling_sum");
+        },
+        py::arg("array"), py::arg("window"), py::arg("kernel") = "auto",
+        "Rolling window sum (n - window + 1 outputs). Returns (out | None, kernel, "
+        "runtime_ns); None means use the NumPy fallback (overflow risk).");
+
+    m.def(
+        "rolling_mean",
+        [](const py::array& a, size_t window, const std::string& kernel) {
+            return rolling(a, window, 0, RollingOp::Mean, kernel, "rolling_mean");
+        },
+        py::arg("array"), py::arg("window"), py::arg("kernel") = "auto",
+        "Rolling window mean. Same return convention as rolling_sum.");
+
+    m.def(
+        "rolling_var",
+        [](const py::array& a, size_t window, size_t ddof) {
+            return rolling(a, window, ddof, RollingOp::Var, "scalar", "rolling_var");
+        },
+        py::arg("array"), py::arg("window"), py::arg("ddof") = 0,
+        "Rolling window variance (np.var semantics with ddof). Same return "
+        "convention as rolling_sum.");
+
+    m.def("cpu_has_avx2_fma", &cpu_has_avx2_fma);
 }

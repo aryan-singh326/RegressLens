@@ -9,14 +9,7 @@
 #include "regresslens/filter_mt_avx2.hpp"
 #include "regresslens/filter_scalar.hpp"
 
-#define CHECK(cond)                                                       \
-    do {                                                                  \
-        if (!(cond)) {                                                    \
-            std::fprintf(stderr, "CHECK FAILED: %s (%s:%d)\n", #cond,     \
-                         __FILE__, __LINE__);                             \
-            std::exit(1);                                                 \
-        }                                                                 \
-    } while (0)
+#include "test_util.hpp"
 
 template <typename T>
 static void check_matches_scalar(const char* label, size_t n, size_t num_threads,
@@ -55,6 +48,7 @@ static void check_matches_scalar(const char* label, size_t n, size_t num_threads
 }
 
 int main() {
+    SKIP_UNLESS_AVX2();
     for (size_t n : {size_t(0), size_t(1), size_t(50), size_t(1000), size_t(100'000)}) {
         for (size_t threads : {size_t(1), size_t(2), size_t(3), size_t(8), size_t(64)}) {
             for (double sel : {0.0, 0.3, 0.5, 0.7, 1.0}) {

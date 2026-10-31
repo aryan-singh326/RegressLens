@@ -1,0 +1,2 @@
+pandas-57366-to-datetime-float-unit: definition ok
+  -> correct=True runs=126 elapsed=638s

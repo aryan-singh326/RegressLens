@@ -1,0 +1,35 @@
+rglns verify: 14000 cases (seed 777), 548.5 s; accuracy policy: max error <= max(NumPy's, 1 ulp) vs the exact result
+  operation     dtype    kernel    cases     max err   NumPy max  result
+  filter        float32  avx2       1000      0.00ul      0.00ul  ok
+  filter        float32  mt_avx2    1000      0.00ul      0.00ul  ok
+  filter        float32  scalar     1000      0.00ul      0.00ul  ok
+  filter        float64  avx2       1000      0.00ul      0.00ul  ok
+  filter        float64  mt_avx2    1000      0.00ul      0.00ul  ok
+  filter        float64  scalar     1000      0.00ul      0.00ul  ok
+  mean          float32  avx2       1000      0.50ul   1114.92ul  ok
+  mean          float32  mt_avx2    1000      0.50ul   1114.92ul  ok
+  mean          float32  scalar     1000      0.50ul   1114.92ul  ok
+  mean          float64  avx2       1000      0.50ul 1939662649.90ul  ok
+  mean          float64  mt_avx2    1000      0.50ul 1939662649.90ul  ok
+  mean          float64  scalar     1000      0.50ul 1939662649.90ul  ok
+  projection    float32  avx2       1000      0.50ul   3486.87ul  ok
+  projection    float32  scalar     1000   3486.87ul   3486.87ul  ok
+  projection    float64  avx2       1000      0.50ul   7359.43ul  ok
+  projection    float64  scalar     1000   7359.43ul   7359.43ul  ok
+  rolling_mean  float32  avx2       1000      0.50ul 15123124.28ul  ok
+  rolling_mean  float32  scalar     1000      0.50ul 15123124.28ul  ok
+  rolling_mean  float64  avx2       1000      0.50ul 549755813888.33ul  ok
+  rolling_mean  float64  scalar     1000      0.50ul 549755813888.33ul  ok
+  rolling_sum   float32  avx2       1000      0.50ul 8388608.00ul  ok
+  rolling_sum   float32  scalar     1000      0.50ul 8388608.00ul  ok
+  rolling_sum   float64  avx2       1000      0.50ul 412316860416.00ul  ok
+  rolling_sum   float64  scalar     1000      0.50ul 412316860416.00ul  ok
+  rolling_var   float32  scalar     1000      0.50ul 7456541.11ul  ok
+  rolling_var   float64  scalar     1000      0.50ul 16777216.00ul  ok
+  sum           float32  avx2       1000      0.50ul    384.50ul  ok
+  sum           float32  mt_avx2    1000      0.50ul    384.50ul  ok
+  sum           float32  scalar     1000      0.50ul    384.50ul  ok
+  sum           float64  avx2       1000      0.50ul 134217728.00ul  ok
+  sum           float64  mt_avx2    1000      0.50ul 134217728.00ul  ok
+  sum           float64  scalar     1000      0.50ul 134217728.00ul  ok
+  NaN/Inf semantics: 7401 case-kernel checks with injected NaN/Inf, 0 mismatches

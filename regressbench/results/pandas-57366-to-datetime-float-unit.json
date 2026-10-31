@@ -1,0 +1,18 @@
+{
+  "id": "pandas-57366-to-datetime-float-unit",
+  "elapsed_s": 638.0361378192902,
+  "exit_code": 0,
+  "stdout_tail": "rglns bisect: converged\n  most likely first bad commit: d9f70b397a BUG: to_datetime with floats and unit not matching Timestamp (#56037) (p = 1.000, effect +46.1%)\n  95% credible set (1 commit): d9f70b397a\n  126 runs over 35 commits in 635 s; attribution prior from pandas/core/construction.py:674 range_to_ndarray: 2/35 commits touch its stack files ['/rb/bench/pandas_57366.py', 'pandas/core/construction.py', 'pandas/core/series.py']\n",
+  "stderr_tail": "bisecting 35 commits (1e1f53c805..aeed91c027)\nendpoints: bad vs good +44.6% (canary-adjusted)\nattribution prior from pandas/core/construction.py:674 range_to_ndarray: 2/35 commits touch its stack files ['/rb/bench/pandas_57366.py', 'pandas/core/construction.py', 'pandas/core/series.py']\nbatch size per visit: 20 (build 44.4 s, run 0.79 s)\n  visit 1: commit 13 edbdf95f04 -3.0% vs good; best 14 p=0.05\n  visit 2: commit 24 4cd6d7efbc +51.0% vs good; best 14 p=0.09\n  visit 3: commit 19 e37ff77b87 +3.2% vs good; best 20 p=0.20\n  visit 4: commit 21 bb9ef02ede +42.4% vs good; best 20 p=0.50\n  visit 5: commit 20 d9f70b397a +46.0% vs good; best 20 p=1.00\n",
+  "found": "d9f70b397a010754ae41e7d201bba05834294559",
+  "correct": true,
+  "in_credible_set": true,
+  "probability": 0.9999999999740736,
+  "runs": 126,
+  "converged": true,
+  "credible_set_size": 1,
+  "commits": 35,
+  "prior": "attribution prior from pandas/core/construction.py:674 range_to_ndarray: 2/35 commits touch its stack files ['/rb/bench/pandas_57366.py', 'pandas/core/construction.py', 'pandas/core/series.py']",
+  "prior_flagged": 2,
+  "prior_flags_culprit": false
+}
