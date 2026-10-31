@@ -120,12 +120,17 @@ class TestBaselineCheck:
         assert rc == 0 and "insufficient runs" in out
 
     def test_contiguity_loss_is_diagnosed_with_remediation(self, script, monkeypatch, capsys):
+        # No canaries: the test-sized memory canary (4 MiB) fits in cache, and
+        # on shared CI runners it can move by +70% between two sessions a few
+        # seconds apart, which correctly turns every verdict into advisory
+        # environment drift. Drift handling has its own tests (test_stats,
+        # test_diagnosis).
         path = script(CONTIGUITY, "contiguity_pipeline.py")
         monkeypatch.delenv("SIMULATE_CONTIGUITY_LOSS", raising=False)
-        rglns("baseline", "--name", "v1", "--runs", "7", "--", "python", path)
+        rglns("baseline", "--name", "v1", "--runs", "7", "--no-canary", "--", "python", path)
         monkeypatch.setenv("SIMULATE_CONTIGUITY_LOSS", "1")
-        rc = rglns("check", "--baseline", "v1", "--runs", "7", "--seed", "3", "--json",
-                   str(os.path.dirname(path) + "/report.json"), "--", "python", path)
+        rc = rglns("check", "--baseline", "v1", "--runs", "7", "--no-canary", "--seed", "3",
+                   "--json", str(os.path.dirname(path) + "/report.json"), "--", "python", path)
         out = capsys.readouterr().out
         assert rc == 1, out
         assert "contiguity_loss" in out and "contiguity_pipeline.py" in out
