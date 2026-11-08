@@ -1,6 +1,6 @@
 # regresslens-accel
 
-Optional native kernels for [RegressLens](../README.md). Install them with
+Optional native kernels for [RegressLens](https://github.com/aryan-singh326/RegressLens). Install them with
 
 ```
 pip install "regresslens[accel]"
