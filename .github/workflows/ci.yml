@@ -25,8 +25,9 @@ jobs:
           # setup-python has no 3.9 build for Ubuntu 26.04 (ubuntu-latest)
           - {os: ubuntu-24.04, python: "3.9"}
           - {os: ubuntu-24.04-arm, python: "3.12"}   # aarch64: scalar kernels only
-          - {os: macos-14, python: "3.9"}            # arm64
-          - {os: macos-14, python: "3.13"}
+          # macos-14 images were retired on 2026-11-02.
+          - {os: macos-15, python: "3.9"}            # arm64
+          - {os: macos-15, python: "3.13"}
           - {os: macos-15-intel, python: "3.12"}     # x86_64
           - {os: windows-latest, python: "3.9"}
           - {os: windows-latest, python: "3.13"}
@@ -34,7 +35,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      # Runner images cache only the 5 most popular Python versions, so 3.9
+      # (end of life) is downloaded on every run, and a transient download
+      # error (HTTP 504) once failed a job here. One retry.
       - uses: actions/setup-python@v6
+        id: setup-python
+        continue-on-error: true
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Retry setup-python
+        if: steps.setup-python.outcome == 'failure'
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Install regresslens-accel (from source) and regresslens
@@ -72,7 +83,14 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6  # one retry, as in the python job
+        id: setup-python
+        continue-on-error: true
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Retry setup-python
+        if: steps.setup-python.outcome == 'failure'
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - run: |
@@ -102,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14]
+        os: [ubuntu-latest, windows-latest, macos-15]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
