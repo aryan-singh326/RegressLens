@@ -144,8 +144,27 @@ static void test_f32_drift_at_scale() {
     CHECK(max_rel_diff < 1e-4);
 }
 
+// Rounding residue of values that have left the window must not reach
+// later outputs: on the finite path and on the NaN-segmented one.
+static void test_no_residue_from_departed_values() {
+    std::vector<double> in = big_then_tiny_blocks(5);
+    for (size_t window : {size_t(1), size_t(2), size_t(7), size_t(150)}) {
+        check_window_sums(in, window, rolling_sum_scalar<double>);
+    }
+    std::vector<double> out(in.size());
+    rolling_mean_scalar<double>(in.data(), out.data(), in.size(), 1);
+    for (size_t i = 0; i < in.size(); ++i) CHECK(out[i] == in[i]);
+
+    in[3] = NAN;  // routes the whole input to the NaN-segmented kernel
+    for (size_t window : {size_t(1), size_t(2), size_t(7), size_t(150)}) {
+        check_window_sums(in, window, rolling_sum_scalar<double>);
+    }
+    std::printf("test_no_residue_from_departed_values passed\n");
+}
+
 int main() {
     test_known_values();
+    test_no_residue_from_departed_values();
     test_f32_drift_at_scale();
     test_rolling_mean();
     test_window_equals_n();

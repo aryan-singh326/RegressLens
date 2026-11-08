@@ -22,7 +22,12 @@ case count and the seed. Failing cases are shrunk and saved to
 [validation.md](validation.md#wp8-rglns-verify-accuracy-policy). On 14,000
 cases every native kernel (sum, mean, rolling sum/mean/variance, AVX2
 projection) stays within 0.5 ulp of exact, i.e. correctly rounded on every
-case tested; the filter is exact. NumPy's `np.convolve`-based rolling mean is
+case tested; the filter is exact. CI also checks 7,000 fresh cases every
+night (seeded by the run number). In November 2026 that caught float64
+rolling sums and means 4-256 ulp off on the 16-orders-of-magnitude
+distribution (seeds 12 and 14), which the 14,000-case run had missed; the
+fix is described under "Rolling sum/mean" below. Since the fix, 154,000
+cases on 22 seeds, 12 and 14 included, pass with no failures. NumPy's `np.convolve`-based rolling mean is
 off by up to 5e11 ulp on the same inputs. The scalar projection matches NumPy
 bit for bit (same two roundings), so its error is NumPy's.
 
@@ -34,8 +39,22 @@ bit for bit (same two roundings), so its error is NumPy's.
 * **Projection:** the scalar kernel computes `scale * x + offset` exactly as
   NumPy does (two roundings, `-ffp-contract=off`). AVX2 uses FMA (one rounding)
   for every element, including the tail.
-* **Rolling sum/mean:** an error-free sliding accumulator, so the error does
-  not grow with n (the 0.1 float32 kernel reached 5.6% relative error).
+* **Rolling sum/mean:** a compensated sliding accumulator, so the error does
+  not grow with n (the 0.1 float32 kernel reached 5.6% relative error). It
+  is not error-free: the error term's own rounding still comes from every
+  value that has passed through the window. After large values have left
+  (1e-8 values after 1e8 ones) that residue can be hundreds of ulps of the
+  result, where `np.convolve`, which sums each window afresh, is exact. So
+  the accumulator keeps a rigorous bound on its error and sums the window
+  again from scratch whenever the bound could exceed 1/8 ulp of the output;
+  every output is then within 0.5 + 1/8 ulp of the exact window sum. On
+  ordinary data the bound never gets there, and the rebuild costs O(window)
+  when it does. If even a fresh sum misses 1/8 ulp (a window whose values
+  cancel by ~13 orders of magnitude, where `np.convolve` is far worse), the
+  kernel waits until half of that window's magnitude has slid out before
+  rebuilding again. Tracking the bound costs ~20% (median over data, dtype,
+  window and kernel at n = 1e6; at most 1.5x, float64 wide-range data with
+  window 2); AVX2 stays ~2.2x faster than scalar.
 * **Rolling variance:** deviations from a shift K and their squares as exact
   double-doubles (TwoSum, Dekker TwoProduct), and a double-double final
   formula. K re-anchors every window and whenever cancellation would exceed

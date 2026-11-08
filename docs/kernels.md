@@ -47,13 +47,15 @@ runs the scalar tests and the Python smoke tests under `qemu -cpu Nehalem`.
 
 ## Accuracy-driven kernel design
 
-See [accuracy.md](accuracy.md). In short, every sum is an error-free (s, c)
+See [accuracy.md](accuracy.md). In short, every sum is a compensated (s, c)
 pair. Means and variances divide double-double values with a single rounding.
-Rolling variance shifts by a recent window mean, re-anchors automatically when
-cancellation would exceed 1e10, and returns exactly 0 for constant windows.
-The AVX2 rolling kernel runs four compensated sliding windows in parallel
-lanes. The old prefix-sum design cancelled large prefix values and was both
-slower and less accurate.
+Rolling sums and means keep a bound on their accumulator's error and sum the
+window afresh when it could exceed 1/8 ulp of the output. Rolling variance
+shifts by a recent window mean, re-anchors automatically when cancellation
+would exceed 1e10, and returns exactly 0 for constant windows. The AVX2
+rolling kernel runs four compensated sliding windows in parallel lanes, each
+re-anchoring on its own. The old prefix-sum design cancelled large prefix
+values and was both slower and less accurate.
 
 ## Characterization and selector thresholds
 

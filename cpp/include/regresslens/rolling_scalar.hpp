@@ -15,10 +15,18 @@
 // subtract the outgoing one) carries every earlier window's rounding
 // error forward, so its error grows with n instead of with the window.
 // Measured in Phase 1: 5.6% relative error for float32 at
-// n=1,000,003, window=500. These kernels keep the accumulator as an
-// error-free (s, c) pair, so every output is within about one ulp of
-// the exact window sum, which is more accurate than np.convolve's
-// per-window dot product.
+// n=1,000,003, window=500. These kernels keep the accumulator as a
+// compensated (s, c) pair: TwoSum and the exact difference are
+// error-free, so s + c misses the window sum only by the rounding of c
+// itself. That residue still comes from every value that has passed
+// through the window. Once large values have left and the window sum is
+// many orders of magnitude smaller (1e-8 values after 1e8 ones), it can
+// be hundreds of ulps of the result, while np.convolve, which sums every
+// window afresh, is exact there (found by the nightly `rglns verify`).
+// So the accumulator also bounds its own error, and the window is summed
+// again from scratch whenever that bound could exceed 1/8 ulp of the
+// output (BoundedSum, Reanchor). Every output is then within 0.5 + 1/8
+// ulp of the exact window sum.
 //
 // NaN/Inf. A sliding accumulator also never recovers from a
 // non-finite input: once Inf enters, subtracting it later yields NaN
@@ -60,21 +68,99 @@ inline double window_value(const CompSum& acc, double w) {
     return Mean ? dd_div(DD{acc.s, acc.c}, w) : acc.s + acc.c;
 }
 
+// A compensated sum with a bound on its own error. TwoSum
+// (CompSum::add) and two_diff are exact; the only roundings are the
+// updates of the error term c, each off by at most u |c| afterwards
+// (u = 2^-53). Adding DBL_EPSILON |c| = 2u |c| after every update (2u
+// also covers the rounding of `err` itself) keeps
+// |s + c - exact sum| <= err.
+struct BoundedSum {
+    CompSum acc;
+    double err = 0.0;
+
+    void add(double x) {
+        acc.add(x);
+        err += DBL_EPSILON * std::fabs(acc.c);
+    }
+    void add_to_error_term(double e) {
+        acc.c += e;
+        err += DBL_EPSILON * std::fabs(acc.c);
+    }
+    double value() const { return acc.s + acc.c; }
+};
+
+// When to sum the window again from scratch (O(window)): when `err`
+// could exceed 1/8 ulp of the output (|v| * eps / 16 <= ulp(v) / 8). A
+// fresh sum leaves only the window's own rounding. If even that misses
+// the target (the window's values cancel by ~13 orders of magnitude or
+// more, where np.convolve is far worse), summing again cannot help until
+// the window has changed, so the guard then waits until half of that
+// window's magnitude has slid out or the bound has doubled. On ordinary
+// data rebuilds are rare.
+template <typename T>
+struct Reanchor {
+    static constexpr double kLimit = std::numeric_limits<T>::epsilon() / 16.0;
+    bool waiting = false;     // the last rebuild missed the target
+    double anchor_mag = 0.0;  // sum |x| over that window
+    double anchor_err = 0.0;  // err right after that rebuild
+    double left_mag = 0.0;    // sum |x| that has left the window since
+
+    bool due(double v, double err) const {
+        if (!(err > std::fabs(v) * kLimit)) return false;
+        return !waiting || left_mag >= 0.5 * anchor_mag || err > 2.0 * anchor_err;
+    }
+    void rebuilt(double v, double err, double mag) {
+        waiting = err > std::fabs(v) * kLimit;
+        anchor_mag = mag;
+        anchor_err = err;
+        left_mag = 0.0;
+    }
+    void leaving(double x) { left_mag += std::fabs(x); }
+};
+
+// Sums the (finite) window in[start, start + window) afresh into `sum`;
+// returns sum |x| over it.
+template <typename T>
+inline double sum_window(const T* in, size_t start, size_t window, BoundedSum& sum) {
+    sum = BoundedSum{};
+    double mag = 0.0;
+    for (size_t j = start; j < start + window; ++j) {
+        double x = static_cast<double>(in[j]);
+        sum.add(x);
+        mag += std::fabs(x);
+    }
+    return mag;
+}
+
+// Output for window i, all of whose values are finite.
+template <typename T, bool Mean>
+inline T emit_bounded(const T* in, size_t i, size_t window, double w, BoundedSum& sum,
+                      Reanchor<T>& guard) {
+    if (guard.due(sum.value(), sum.err)) {
+        double mag = sum_window(in, i, window, sum);
+        guard.rebuilt(sum.value(), sum.err, mag);
+    }
+    return static_cast<T>(window_value<Mean>(sum.acc, w));
+}
+
 template <typename T, bool Mean>
 void rolling_finite(const T* in, T* out, size_t n, size_t window) {
     const double w = static_cast<double>(window);
-    CompSum acc;
-    for (size_t i = 0; i < window; ++i) acc.add(static_cast<double>(in[i]));
-    out[0] = static_cast<T>(window_value<Mean>(acc, w));
+    BoundedSum sum;
+    Reanchor<T> guard;
+    double mag = sum_window(in, 0, window, sum);
+    guard.rebuilt(sum.value(), sum.err, mag);
+    out[0] = emit_bounded<T, Mean>(in, 0, window, w, sum, guard);
 
     const size_t out_count = n - window + 1;
     for (size_t i = 1; i < out_count; ++i) {
         double d, e;
         two_diff(static_cast<double>(in[i + window - 1]),
                  static_cast<double>(in[i - 1]), d, e);
-        acc.add(d);
-        acc.c += e;
-        out[i] = static_cast<T>(window_value<Mean>(acc, w));
+        sum.add(d);
+        sum.add_to_error_term(e);
+        guard.leaving(static_cast<double>(in[i - 1]));
+        out[i] = emit_bounded<T, Mean>(in, i, window, w, sum, guard);
     }
 }
 
@@ -83,40 +169,48 @@ struct NonfiniteCounts {
 };
 
 template <typename T>
-inline void account(NonfiniteCounts& nf, CompSum& acc, T x, bool adding) {
+inline void account(NonfiniteCounts& nf, BoundedSum& sum, T x, bool adding) {
     if (std::isnan(x)) {
         adding ? ++nf.nan : --nf.nan;
     } else if (std::isinf(x)) {
         size_t& slot = x > 0 ? nf.pinf : nf.ninf;
         adding ? ++slot : --slot;
     } else {
-        acc.add(adding ? static_cast<double>(x) : -static_cast<double>(x));
+        sum.add(adding ? static_cast<double>(x) : -static_cast<double>(x));
     }
 }
 
 template <typename T, bool Mean>
-inline T emit_nonfinite(const NonfiniteCounts& nf, const CompSum& acc, double w) {
+inline T emit_nonfinite(const T* in, size_t i, size_t window, double w,
+                        const NonfiniteCounts& nf, BoundedSum& sum, Reanchor<T>& guard) {
     if (nf.nan > 0 || (nf.pinf > 0 && nf.ninf > 0)) {
         return std::numeric_limits<T>::quiet_NaN();
     }
     if (nf.pinf > 0) return std::numeric_limits<T>::infinity();
     if (nf.ninf > 0) return -std::numeric_limits<T>::infinity();
-    return static_cast<T>(window_value<Mean>(acc, w));
+    return emit_bounded<T, Mean>(in, i, window, w, sum, guard);  // window all finite
 }
 
 template <typename T, bool Mean>
 void rolling_nonfinite(const T* in, T* out, size_t n, size_t window) {
     const double w = static_cast<double>(window);
     NonfiniteCounts nf;
-    CompSum acc;
-    for (size_t i = 0; i < window; ++i) account(nf, acc, in[i], true);
-    out[0] = emit_nonfinite<T, Mean>(nf, acc, w);
+    BoundedSum sum;
+    Reanchor<T> guard;
+    double mag = 0.0;
+    for (size_t i = 0; i < window; ++i) {
+        account(nf, sum, in[i], true);
+        if (std::isfinite(in[i])) mag += std::fabs(static_cast<double>(in[i]));
+    }
+    guard.rebuilt(sum.value(), sum.err, mag);
+    out[0] = emit_nonfinite<T, Mean>(in, 0, window, w, nf, sum, guard);
 
     const size_t out_count = n - window + 1;
     for (size_t i = 1; i < out_count; ++i) {
-        account(nf, acc, in[i + window - 1], true);
-        account(nf, acc, in[i - 1], false);
-        out[i] = emit_nonfinite<T, Mean>(nf, acc, w);
+        account(nf, sum, in[i + window - 1], true);
+        account(nf, sum, in[i - 1], false);
+        if (std::isfinite(in[i - 1])) guard.leaving(static_cast<double>(in[i - 1]));
+        out[i] = emit_nonfinite<T, Mean>(in, i, window, w, nf, sum, guard);
     }
 }
 

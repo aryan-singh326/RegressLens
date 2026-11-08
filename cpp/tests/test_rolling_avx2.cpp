@@ -94,9 +94,26 @@ static void test_edge_cases() {
     std::printf("test_edge_cases passed\n");
 }
 
+// Rounding residue of values that have left a lane's window must not
+// reach later outputs (see test_rolling_scalar.cpp).
+static void test_no_residue_from_departed_values() {
+    std::vector<double> in = big_then_tiny_blocks(6);
+    auto sum = [](const double* x, double* out, size_t n, size_t window) {
+        return regresslens::rolling_sum_avx2(x, out, n, window);
+    };
+    for (size_t window : {size_t(1), size_t(2), size_t(7), size_t(150)}) {
+        check_window_sums(in, window, sum);
+    }
+    std::vector<double> out(in.size());
+    regresslens::rolling_mean_avx2(in.data(), out.data(), in.size(), 1);
+    for (size_t i = 0; i < in.size(); ++i) CHECK(out[i] == in[i]);
+    std::printf("test_no_residue_from_departed_values passed\n");
+}
+
 int main() {
     SKIP_UNLESS_AVX2();
     test_edge_cases();
+    test_no_residue_from_departed_values();
 
     for (size_t n : {size_t(20), size_t(1000), size_t(100'000), size_t(1'000'003)}) {
         for (size_t window : {size_t(1), size_t(5), size_t(20), size_t(500)}) {

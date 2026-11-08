@@ -31,6 +31,8 @@ constexpr int kSkipReturnCode = 77;
     } while (0)
 
 #include <cmath>
+#include <limits>
+#include <random>
 #include <utility>
 #include <vector>
 
@@ -57,4 +59,49 @@ inline double exact_sum(const T* data, size_t n) {
     double acc = 0.0;
     for (size_t j = partials.size(); j-- > 0;) acc += partials[j];
     return acc;
+}
+
+inline double ulp_of(double x) {
+    x = std::fabs(x);
+    return std::nextafter(x, std::numeric_limits<double>::infinity()) - x;
+}
+
+// Blocks of values up to 1e8 alternating with blocks of values below
+// 1e-8. A sliding accumulator that keeps the rounding residue of values
+// that have left the window gets the tiny windows wrong by many ulps
+// (the nightly `rglns verify` found 4-256 ulp), although each of them
+// summed alone is exact.
+inline std::vector<double> big_then_tiny_blocks(unsigned seed, size_t block = 200,
+                                                size_t blocks = 20) {
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<double> big(-1e8, 1e8), tiny(-1e-8, 1e-8);
+    std::vector<double> in;
+    for (size_t b = 0; b < blocks; ++b) {
+        for (size_t i = 0; i < block; ++i) in.push_back(big(rng));
+        for (size_t i = 0; i < block; ++i) in.push_back(tiny(rng));
+    }
+    return in;
+}
+
+// Every finite output within one ulp of the exact window sum (the
+// accuracy policy's bound) and NaN exactly where the window has a NaN.
+template <typename F>
+inline void check_window_sums(const std::vector<double>& in, size_t window, F kernel) {
+    std::vector<double> out(in.size());
+    size_t count = kernel(in.data(), out.data(), in.size(), window);
+    CHECK(count == in.size() - window + 1);
+    for (size_t i = 0; i < count; ++i) {
+        bool has_nan = false;
+        for (size_t j = i; j < i + window; ++j) has_nan = has_nan || std::isnan(in[j]);
+        if (has_nan) {
+            CHECK(std::isnan(out[i]));
+            continue;
+        }
+        double want = exact_sum(in.data() + i, window);
+        if (!(std::fabs(out[i] - want) <= ulp_of(want))) {
+            std::fprintf(stderr, "window=%zu i=%zu got=%.17g want=%.17g\n", window, i, out[i],
+                         want);
+            CHECK(false);
+        }
+    }
 }

@@ -14,10 +14,12 @@
 // The scalar kernel is latency-bound on its single TwoSum chain, so this
 // is where the speedup comes from.
 //
-// ACCURACY is identical to the scalar kernel: each lane keeps an
-// error-free (s, c) accumulator, so every window sum is within about one
-// ulp of exact, and the mean divides the double-double sum with one
-// rounding. The pre-0.2 AVX2 design (exclusive prefix sums, then
+// ACCURACY is the scalar kernel's (see rolling_scalar.hpp): each lane
+// keeps a compensated (s, c) accumulator and a bound on its error, and a
+// lane sums its window again from scratch whenever that bound could
+// exceed 1/8 ulp of the output, so every output is within 0.5 + 1/8 ulp
+// of the exact window sum. The mean divides the double-double sum with
+// one rounding. The pre-0.2 AVX2 design (exclusive prefix sums, then
 // P[i+w] - P[i]) cancelled two large prefix values per window, and even
 // with double-double prefixes the low-order terms' own rounding
 // resurfaced as a few ulps on wide-dynamic-range data. This design has
@@ -60,6 +62,39 @@ static inline void store_lanes(T* out, const long long* pos, const bool* active,
     }
 }
 
+static inline double abs_sd(double x) { return x < 0 ? -x : x; }
+
+// Sums the window in[start, start + w) afresh (scalar TwoSum) into s + c
+// with its error bound `err` (as BoundedSum in rolling_scalar.hpp);
+// returns sum |x| over the window.
+template <typename T>
+static inline double lane_window(const T* in, long long start, long long w, double& s,
+                                 double& c, double& err) {
+    SumParts acc{0.0, 0.0};
+    double e = 0.0, mag = 0.0;
+    for (long long j = start; j < start + w; ++j) {
+        double x = static_cast<double>(in[j]);
+        two_sum(acc, x);
+        e += DBL_EPSILON * abs_sd(acc.c);
+        mag += abs_sd(x);
+    }
+    s = acc.s;
+    c = acc.c;
+    err = e;
+    return mag;
+}
+
+// Per-lane state of the re-anchoring guard (Reanchor in
+// rolling_scalar.hpp; repeated here because this TU must not share inline
+// functions with baseline code). The sliding magnitude that has left the
+// window lives in a vector register. A plain aggregate, so no implicit
+// constructor is emitted as a COMDAT.
+struct LaneGuard {
+    bool waiting;
+    double anchor_mag;
+    double anchor_err;
+};
+
 template <typename T, bool Mean>
 static inline size_t rolling_avx2_impl(const T* in, T* out, size_t n, size_t window) {
     if (window == 0 || n < window) return 0;
@@ -67,6 +102,9 @@ static inline size_t rolling_avx2_impl(const T* in, T* out, size_t n, size_t win
     const long long w = static_cast<long long>(window);
     const long long seg = (out_count + kLanes - 1) / kLanes;
     const __m256d vw = _mm256_set1_pd(static_cast<double>(window));
+    const double limit = (sizeof(T) == sizeof(float) ? FLT_EPSILON : DBL_EPSILON) / 16.0;
+    const __m256d veps = _mm256_set1_pd(DBL_EPSILON);
+    const __m256d vlimit = _mm256_set1_pd(limit);
 
     // Lane l covers outputs [begin[l], end[l]); trailing lanes may be empty.
     long long begin[kLanes], end[kLanes];
@@ -76,18 +114,20 @@ static inline size_t rolling_avx2_impl(const T* in, T* out, size_t n, size_t win
     }
 
     // First window of every lane, compensated (scalar; O(4 * window)).
-    alignas(32) double s0[kLanes], c0[kLanes];
+    alignas(32) double s0[kLanes], c0[kLanes], e0[kLanes];
+    LaneGuard guard[kLanes] = {};
     for (int l = 0; l < kLanes; ++l) {
-        SumParts acc{0.0, 0.0};
+        s0[l] = c0[l] = e0[l] = 0.0;
         if (begin[l] < end[l]) {
-            for (long long j = begin[l]; j < begin[l] + w; ++j) {
-                two_sum(acc, static_cast<double>(in[j]));
-            }
+            double mag = lane_window(in, begin[l], w, s0[l], c0[l], e0[l]);
+            guard[l].waiting = e0[l] > abs_sd(s0[l] + c0[l]) * limit;
+            guard[l].anchor_mag = mag;
+            guard[l].anchor_err = e0[l];
         }
-        s0[l] = acc.s;
-        c0[l] = acc.c;
     }
     __m256d s = _mm256_load_pd(s0), c = _mm256_load_pd(c0);
+    __m256d err = _mm256_load_pd(e0);       // error bound per lane
+    __m256d left = _mm256_setzero_pd();     // sum |x| that has left, per lane
 
     long long pos[kLanes], in_idx[kLanes], out_idx[kLanes];
     bool active[kLanes];
@@ -115,10 +155,47 @@ static inline size_t rolling_avx2_impl(const T* in, T* out, size_t n, size_t win
         // s += d exactly (TwoSum), errors into c.
         __m256d t = _mm256_add_pd(s, d);
         __m256d bp2 = _mm256_sub_pd(t, s);
-        __m256d err = _mm256_add_pd(_mm256_sub_pd(s, _mm256_sub_pd(t, bp2)), _mm256_sub_pd(d, bp2));
-        c = _mm256_add_pd(c, _mm256_add_pd(err, e));
+        __m256d ts_err = _mm256_add_pd(_mm256_sub_pd(s, _mm256_sub_pd(t, bp2)),
+                                       _mm256_sub_pd(d, bp2));
+        // The two roundings of c's update, each at most u times its result.
+        __m256d ce = _mm256_add_pd(ts_err, e);
+        c = _mm256_add_pd(c, ce);
         s = t;
-        store_lanes(out, pos, active, Mean ? dd_div_w(s, c, vw) : _mm256_add_pd(s, c));
+        err = _mm256_fmadd_pd(veps, _mm256_add_pd(abs_pd(ce), abs_pd(c)), err);
+        left = _mm256_add_pd(left, abs_pd(b));
+
+        __m256d v = _mm256_add_pd(s, c);
+        int due = _mm256_movemask_pd(
+            _mm256_cmp_pd(err, _mm256_mul_pd(abs_pd(v), vlimit), _CMP_GT_OQ));
+        if (due) {  // rare: re-anchor the lanes whose bound is too large
+            alignas(32) double sv[kLanes], cv[kLanes], ev[kLanes], lv[kLanes];
+            _mm256_store_pd(sv, s);
+            _mm256_store_pd(cv, c);
+            _mm256_store_pd(ev, err);
+            _mm256_store_pd(lv, left);
+            bool changed = false;
+            for (int l = 0; l < kLanes; ++l) {
+                LaneGuard& g = guard[l];
+                if (!((due >> l) & 1) || !active[l]) continue;
+                if (g.waiting && !(lv[l] >= 0.5 * g.anchor_mag) && !(ev[l] > 2.0 * g.anchor_err)) {
+                    continue;
+                }
+                double mag = lane_window(in, pos[l], w, sv[l], cv[l], ev[l]);
+                g.waiting = ev[l] > abs_sd(sv[l] + cv[l]) * limit;
+                g.anchor_mag = mag;
+                g.anchor_err = ev[l];
+                lv[l] = 0.0;
+                changed = true;
+            }
+            if (changed) {
+                s = _mm256_load_pd(sv);
+                c = _mm256_load_pd(cv);
+                err = _mm256_load_pd(ev);
+                left = _mm256_load_pd(lv);
+                v = _mm256_add_pd(s, c);
+            }
+        }
+        store_lanes(out, pos, active, Mean ? dd_div_w(s, c, vw) : v);
     }
     return static_cast<size_t>(out_count);
 }

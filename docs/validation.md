@@ -193,6 +193,18 @@ rglns verify: 14000 cases (seed 777), 548.5 s; accuracy policy: max error <= max
   NaN/Inf semantics: 7401 case-kernel checks with injected NaN/Inf, 0 mismatches
 ```
 
+**Nightly** (`ci.yml`: 7000 cases, seed = run number). Seeds 12 and 14 failed
+before the re-anchoring fix ([accuracy.md](accuracy.md#how-the-kernels-get-there)):
+
+| seed | operation | kernel | error | NumPy |
+|---|---|---|---|---|
+| 12 | rolling_mean float64, window 1 | scalar, avx2 | 4.00 ulp | 0.00 ulp |
+| 14 | rolling_sum float64, window 2 | scalar / avx2 | 256.00 / 44.00 ulp | 0.50 ulp |
+
+Both on the wide distribution: ~1e-8 windows after 1e8 values. After the fix
+(WSL Ubuntu, GCC 15.2, AVX2): seeds 1-22, 154,000 cases, 0 failures, 0 NaN/Inf
+mismatches. Both cases are regression tests in `tests/test_accuracy.py`.
+
 ## WP8: fifth-kernel gate
 *`tools/kernel_gate.py`*
 

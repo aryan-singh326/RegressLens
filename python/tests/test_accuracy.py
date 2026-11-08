@@ -48,6 +48,26 @@ class TestPolicy:
                 ok, ours, theirs, msg = verify.check_case(native, case, kernel)
                 assert ok, (case, kernel, msg)
 
+    @pytest.mark.parametrize("run_seed,case_seed", [(12, 1797722556), (14, 271030069)])
+    def test_cases_found_by_the_nightly_verify(self, native, run_seed, case_seed):
+        """Windows of ~1e-8 values after 1e8 ones: the sliding accumulator
+        kept those values' rounding residue (4 and 256 ulp off; NumPy 0.5)."""
+        [case] = [c for c in verify.make_cases(7000, run_seed, verify.OPS,
+                                               ("float32", "float64"), 20000)
+                  if c.seed == case_seed and c.dtype == "float64"]
+        for kernel in verify.kernels_for(native, case.op):
+            ok, ours, theirs, msg = verify.check_case(native, case, kernel)
+            assert ok, (case, kernel, msg)
+
+    @pytest.mark.parametrize("nonfinite", [False, True])
+    def test_window_of_one_returns_the_input(self, native, nonfinite):
+        """Whatever has left the window before, a window of one is its value."""
+        x = verify.Case("rolling_sum", "float64", "wide", 5000, 1, 3, nonfinite).data()
+        for kernel in verify.kernels_for(native, "rolling_sum"):
+            for op in ("rolling_sum", "rolling_mean"):
+                got = getattr(native, op)(x, 1, kernel)[0]
+                assert np.array_equal(got, x, equal_nan=True), (op, kernel)
+
     def test_float32_reductions_accumulate_in_double(self, native):
         x = np.full(10_000_001, 0.1, dtype=np.float32)
         got = native.reduce_sum(x, "scalar")[0]
