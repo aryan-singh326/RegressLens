@@ -1,5 +1,6 @@
 [build-system]
-requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+# scikit-build-core 0.11: PEP 639 license expressions and license-files.
+requires = ["scikit-build-core>=0.11", "pybind11>=2.12"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -8,18 +9,37 @@ version = "0.2.0"
 description = "Optional native (scalar + AVX2) kernels for RegressLens"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+# An SPDX expression replaces the "License ::" classifier (PEP 639);
+# build backends reject the two together.
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = ["numpy>=1.22"]
+keywords = ["numpy", "simd", "avx2", "kernels", "compensated-summation", "regresslens"]
 classifiers = [
-    "Programming Language :: C++",
-    "Programming Language :: Python :: 3",
-    "Operating System :: POSIX :: Linux",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering",
 ]
 
 [project.urls]
 Homepage = "https://github.com/aryan-singh326/RegressLens"
+Source = "https://github.com/aryan-singh326/RegressLens/tree/main/cpp"
+Issues = "https://github.com/aryan-singh326/RegressLens/issues"
+Documentation = "https://github.com/aryan-singh326/RegressLens/blob/main/docs/kernels.md"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
@@ -34,8 +54,11 @@ cmake.define = { CMAKE_BUILD_TYPE = "Release", REGRESSLENS_BUILD_TESTS = "OFF", 
 sdist.exclude = ["build/", "bench/results/"]
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
-skip = "*-musllinux_* *-win32 *_i686 pp*"
+# Explicit list: it keeps out free-threaded builds (cp314t: the extension
+# does not declare free-threading support) and CPython 3.15 (built by
+# default since cibuildwheel 4.2, but untested here).
+build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = "*-musllinux_*"
 build-verbosity = 1
 # The full Python suite runs against every built wheel, including a
 # pass with the AVX2 kernels disabled (RGLNS_FORCE_KERNEL=scalar).

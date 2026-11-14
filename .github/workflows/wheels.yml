@@ -26,7 +26,8 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-latest]
     steps:
       - uses: actions/checkout@v5
-      - uses: pypa/cibuildwheel@v2.23
+      # 4.x builds CPython 3.9-3.15 (the selection is in cpp/pyproject.toml).
+      - uses: pypa/cibuildwheel@v4.3.5
         with:
           package-dir: cpp
           output-dir: wheelhouse
@@ -68,6 +69,30 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Every artifact carries the license and complete metadata
+        if: matrix.os == 'ubuntu-latest'
+        shell: python
+        run: |
+          import email, glob, os, tarfile, zipfile
+          files = sorted(glob.glob("artifacts/*.whl") + glob.glob("artifacts/*.tar.gz"))
+          assert files, "no artifacts"
+          for path in files:
+              if path.endswith(".whl"):
+                  z = zipfile.ZipFile(path)
+                  names, read = z.namelist(), z.read
+              else:
+                  t = tarfile.open(path)
+                  names = t.getnames()
+                  read = lambda n: t.extractfile(n).read()
+              lic = [n for n in names if os.path.basename(n) == "LICENSE"]
+              assert lic and b"Apache License" in read(lic[0]), f"{path}: no LICENSE"
+              meta_name = [n for n in names if n.endswith((".dist-info/METADATA", "/PKG-INFO"))
+                           and n.count("/") == 1][0]
+              meta = email.message_from_bytes(read(meta_name))
+              assert meta["License-Expression"] == "Apache-2.0", f"{path}: {meta['License-Expression']}"
+              assert meta.get_all("License-File"), f"{path}: no License-File"
+              assert any(c.endswith(":: 3.14") for c in meta.get_all("Classifier")), path
+              print(f"ok  {os.path.basename(path)}: {lic[0]}")
       - name: Install regresslens[accel] from the built wheels
         shell: bash
         run: |
@@ -99,3 +124,6 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          # A partial upload (one project published, the other not) must
+          # not block re-running this job: files already on PyPI are skipped.
+          skip-existing: true

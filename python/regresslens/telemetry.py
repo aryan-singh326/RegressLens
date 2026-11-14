@@ -2,7 +2,8 @@
 
 Off unless the user explicitly opts in: either `rglns telemetry on`, or
 answering "y" to a one-time prompt shown only in an interactive
-terminal (never in CI). `RGLNS_TELEMETRY=0` disables it unconditionally.
+terminal (never in CI), and only when an endpoint is configured.
+`RGLNS_TELEMETRY=0` disables it unconditionally.
 
 An event contains ONLY the fields in telemetry_schema.json (documented
 in docs/telemetry.md): a random install id, the command name, verdict
@@ -86,8 +87,12 @@ def _interactive():
 
 
 def maybe_prompt():
-    """Asks once, in interactive terminals only. Default answer: no."""
-    if state() != "undecided" or not _interactive():
+    """Asks once, in interactive terminals only. Default answer: no.
+
+    No endpoint ships with RegressLens, so without RGLNS_TELEMETRY_URL
+    (or an endpoint saved by `rglns telemetry on --endpoint`) a "yes"
+    would send nothing, and the question is not asked."""
+    if state() != "undecided" or not endpoint() or not _interactive():
         return
     print("RegressLens can send anonymous usage statistics (command name, verdict counts, "
           "Python/NumPy versions, platform; never code, paths or arguments). "

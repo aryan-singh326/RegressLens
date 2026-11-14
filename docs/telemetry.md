@@ -3,13 +3,18 @@
 Telemetry is **off** unless you turn it on:
 
 * `rglns telemetry on [--endpoint URL]`, `rglns telemetry off`, `rglns telemetry status`;
-* a one-time `[y/N]` prompt (default no), shown only in an interactive terminal
-  and never in CI;
+* a one-time `[y/N]` prompt (default no), shown only in an interactive terminal,
+  never in CI, and only when an endpoint is configured;
 * `RGLNS_TELEMETRY=0` disables it unconditionally, even after opting in.
 
 Even when it is on, nothing is sent unless an endpoint is configured
 (`RGLNS_TELEMETRY_URL` or `--endpoint`). One event per command, with a
 2-second timeout, and failures are ignored.
+
+No endpoint ships with RegressLens 0.2.0: there is no hosted collector yet.
+So nothing is sent by default, and the prompt is not shown, because answering
+yes would change nothing. If a release adds a default endpoint, the prompt
+will appear once for users who have not decided.
 
 ## What an event contains
 

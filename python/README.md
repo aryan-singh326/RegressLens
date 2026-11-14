@@ -127,7 +127,7 @@ print(signal.filter_gt(0.5).mean())
   x86-64, chosen at import time from runtime CPU detection. The same wheel is
   safe on any CPU, and CI runs it under an emulated CPU without AVX.
 * **Wheels:** Linux x86_64 and aarch64 (manylinux_2_28), macOS x86_64 and arm64,
-  Windows amd64, CPython 3.9-3.13. Elsewhere, pip builds from source, which
+  Windows amd64, CPython 3.9-3.14. Elsewhere, pip builds from source, which
   needs a C++17 compiler.
 
 ## Documentation

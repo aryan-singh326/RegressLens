@@ -1,4 +1,5 @@
 """Opt-in telemetry (WP9)."""
+import io
 import json
 import os
 import socket
@@ -44,6 +45,32 @@ def test_undecided_is_off_and_never_prompts_non_interactively(no_network, monkey
     telemetry.maybe_prompt()  # stdin is not a TTY under pytest
     assert telemetry.state() == "undecided"
     assert telemetry.record("check", {}) is False
+
+
+def _interactive_terminal(monkeypatch, typed):
+    monkeypatch.delenv("RGLNS_TELEMETRY", raising=False)
+    monkeypatch.setattr(telemetry, "_interactive", lambda: True)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(typed))
+
+
+def test_no_prompt_without_an_endpoint(no_network, monkeypatch, capsys):
+    # Nothing ships with a default endpoint, so "yes" would send nothing.
+    monkeypatch.delenv("RGLNS_TELEMETRY_URL", raising=False)
+    _interactive_terminal(monkeypatch, "y\n")
+    telemetry.maybe_prompt()
+    assert "Enable telemetry?" not in capsys.readouterr().err
+    assert telemetry.state() == "undecided"
+    assert sys.stdin.read() == "y\n"  # stdin belongs to the measured program
+
+
+def test_prompt_with_an_endpoint_records_the_answer(no_network, monkeypatch, capsys):
+    monkeypatch.setenv("RGLNS_TELEMETRY_URL", "http://127.0.0.1:9/never")
+    _interactive_terminal(monkeypatch, "y\n")
+    telemetry.maybe_prompt()
+    assert "Enable telemetry? [y/N]" in capsys.readouterr().err
+    assert telemetry.state() == "on"
+    telemetry.maybe_prompt()  # asked once only
+    assert "Enable telemetry?" not in capsys.readouterr().err
 
 
 def test_on_without_endpoint_sends_nothing(no_network, monkeypatch):

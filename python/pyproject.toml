@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=64"]
+# 77: PEP 639 license expressions and license-files.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,10 +9,30 @@ version = "0.2.0"
 description = "Performance regression intelligence for recurring scientific Python/NumPy pipelines"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+# An SPDX expression replaces the "License ::" classifier (PEP 639);
+# build backends reject the two together.
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = ["numpy>=1.22"]
+keywords = [
+    "performance", "regression", "benchmark", "numpy", "profiling",
+    "bisect", "statistics", "confidence-sequence", "continuous-integration",
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Testing",
     "Topic :: System :: Benchmark",
 ]
@@ -26,6 +47,9 @@ rglns = "regresslens.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/aryan-singh326/RegressLens"
+Source = "https://github.com/aryan-singh326/RegressLens"
+Issues = "https://github.com/aryan-singh326/RegressLens/issues"
+Documentation = "https://github.com/aryan-singh326/RegressLens/tree/main/docs"
 
 [tool.setuptools.packages.find]
 include = ["regresslens*"]
